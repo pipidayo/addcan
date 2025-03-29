@@ -1,3 +1,4 @@
+'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './styles.module.css'
@@ -33,7 +34,11 @@ export default function RoomControls({ name, router }: Props) {
         value={roomCode}
         onChange={(e) => setRoomCode(e.target.value)}
       />
-      <button onClick={joinRoom} disabled={!roomCode} className={styles.button}>
+      <button
+        onClick={joinRoom}
+        disabled={!roomCode && !name}
+        className={styles.button}
+      >
         部屋に入る
       </button>
     </div>
