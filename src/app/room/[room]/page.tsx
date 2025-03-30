@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import RoomHeader from '@/app/components/RoomHeader'
+import VoiceChat from '@/app/components/VoiceChat'
 import styles from './styles.module.css'
 
 export default function room() {
@@ -15,7 +16,8 @@ export default function room() {
 
   return (
     <div className={styles.container}>
-      <RoomHeader></RoomHeader>
+      <RoomHeader roomCode={roomCode as string} router={router} />
+      <VoiceChat roomCode={roomCode as string} />
     </div>
   )
 }
