@@ -22,14 +22,13 @@ export default function VoiceChat({ roomCode }: Props) {
       joinRoom(id)
     })
 
-    newPeer.on('connection', (conn) => {
-      conn.on('data', (data) => {
-        if (typeof data === 'string') {
-          setPeersInRoom((prev) => [...new Set([...prev, data])])
-        }
+    newPeer.on('call', (call) => {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        call.answer(stream)
+        call.on('stream', (remoteStream) => {
+          playAudio(remoteStream)
+        })
       })
-
-      setConnections((prev) => [...prev, conn])
     })
 
     return () => newPeer.destroy()
@@ -47,16 +46,32 @@ export default function VoiceChat({ roomCode }: Props) {
         .then((peerIds: string[]) => {
           peerIds.forEach((peerId) => {
             if (peerId !== myId) {
-              const conn = peer.connect(peerId)
-              conn.on('open', () => {
-                conn.send(myId)
-              })
-              setConnections((prev) => [...prev, conn])
+              navigator.mediaDevices
+                .getUserMedia({ audio: true })
+                .then((stream) => {
+                  const call = peer.call(peerId, stream)
+                  call.on('stream', (remoteStream) => {
+                    playAudio(remoteStream)
+                  })
+
+                  call.on('close', () => {
+                    setConnections((prev) => prev.filter((p) => p !== peerId))
+                  })
+                  setConnections((prev) => [...prev, call])
+                  setPeersInRoom((prev) => [...prev, peerId])
+                })
             }
           })
         })
     }
   }, [peer])
+
+  const playAudio = (stream: MediaStream) => {
+    const audio = new Audio()
+    audio.srcObject = stream
+    audio.autoplay = true
+    document.body.appendChild(audio)
+  }
 
   return (
     <div>
