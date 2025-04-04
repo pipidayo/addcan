@@ -3,6 +3,7 @@ import styles from './styles.module.css'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { initPeer, callPeer, disconnectAll } from '../PeerManager'
+import { on } from 'events'
 
 export default function CallScreen() {
   const { roomCode } = useParams()
@@ -13,6 +14,18 @@ export default function CallScreen() {
   const [myName, setMyName] = useState('')
   const audioRefs = useRef<HTMLAudioElement[]>([])
   const connectedIds = useRef<string[]>([])
+  const [isMuted, setIsMuted] = useState(false)
+  const localstreamRef = useRef<MediaStream | null>(null)
+
+  const toggleMic = () => {
+    if (!localstreamRef.current) return
+
+    const audioTrack = localstreamRef.current.getAudioTracks()[0]
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled
+      setIsMuted(!audioTrack.enabled)
+    }
+  }
 
   useEffect(() => {
     const name = localStorage.getItem('my_name')
@@ -30,6 +43,7 @@ export default function CallScreen() {
     }
 
     initPeer({
+      roomCode: roomCode,
       onReceiveStream: (stream) => {
         const audio = new Audio()
         audio.srcObject = stream
@@ -46,6 +60,8 @@ export default function CallScreen() {
           peerList.push(Id)
           localStorage.setItem(`peers_${roomCode}`, JSON.stringify(peerList))
         }
+        onLocalStream: stream
+        localstreamRef.current = stream
       },
     })
   }, [roomCode, router])
@@ -115,6 +131,10 @@ export default function CallScreen() {
           <li key={p}>{p}</li>
         ))}
       </ul>
+      <button onClick={toggleMic}>
+        {isMuted ? '🔇 ミュート中' : '🎤 ミュート解除'}
+      </button>
+
       <button onClick={leaveRoom} className={styles.button}>
         退出
       </button>

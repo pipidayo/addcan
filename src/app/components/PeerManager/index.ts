@@ -11,7 +11,23 @@ type Options = {
 
 let currentRoomCode = ''
 
-export const initPeer = async ({ onReceiveStream, onPeerOpen }: Options) => {
+export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStream }: Options) =>( {
+	
+	  roomCode,
+	  onReceiveStream,
+	  onPeerOpen,
+    onLocalStream,
+    
+	}: {
+	  roomCode: string;
+	  onReceiveStream: (stream: MediaStream) => void;
+	  onPeerOpen: (id: string) => void;
+    onLocalStream: (stream: MediaStream) => void;
+	}) => {
+	  currentRoomCode = roomCode
+  
+  }
+
   return new Promise<string>(async (resolve, reject) => {
     try {
       peer = new Peer()
@@ -21,11 +37,15 @@ export const initPeer = async ({ onReceiveStream, onPeerOpen }: Options) => {
         resolve(id)
       })
 
+
+
       peer.on('call', async (call) => {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
         })
         localStream = stream
+
+        onLocalStream(stream)
 
         call.answer(stream)
 
@@ -56,7 +76,7 @@ export const callPeer = async (
 
   call.on('close', () => {
     console.log('通話切断', targetId)
-    removePeerId(roomCode, targetId)
+    removePeerId(currentRoomCode, targetId)
   })
 
   connections.push(call)
