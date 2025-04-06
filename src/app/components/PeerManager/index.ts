@@ -1,8 +1,9 @@
-import Peer from 'peerjs'
+import Peer, { DataConnection } from 'peerjs'
 
 let peer: Peer | null = null
 let localStream: MediaStream | null = null
 const connections: MediaConnection[] = []
+const dataConnections:{[id:string]:DataConnection} = {}
 
 type Options = {
   onReceiveStream: (stream: MediaStream) => void
@@ -11,18 +12,20 @@ type Options = {
 
 let currentRoomCode = ''
 
-export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStream }: Options) =>( {
+export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStream,onReciveMuteStatus }: Options) =>( {
 	
 	  roomCode,
 	  onReceiveStream,
 	  onPeerOpen,
     onLocalStream,
-    
+    onReciveMuteStatus,
+
 	}: {
 	  roomCode: string;
 	  onReceiveStream: (stream: MediaStream) => void;
 	  onPeerOpen: (id: string) => void;
     onLocalStream: (stream: MediaStream) => void;
+    onReciveMuteStatus?:(peerId:string,isMuted:boolean) => void
 	}) => {
 	  currentRoomCode = roomCode
   
@@ -58,6 +61,17 @@ export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStr
     } catch (err) {
       reject(err)
     }
+peer?.on("connection", (conn) => {
+  dataConnections[conn.peer] = conn
+  
+  conn.on("data", (data) => {
+  if (data.type === "mute-status"){
+    onReciveMuteStatus?.(conn.peer,data.isMuted)
+  }
+  }  )
+
+  
+
   })
 }
 

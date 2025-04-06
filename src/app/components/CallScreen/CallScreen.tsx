@@ -4,6 +4,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 import { initPeer, callPeer, disconnectAll } from '../PeerManager'
 import { on } from 'events'
+import { send } from 'process'
+import { sendMuteStatus } from '../PeerManager'
 
 export default function CallScreen() {
   const { roomCode } = useParams()
@@ -12,6 +14,7 @@ export default function CallScreen() {
   const [myPeerId, setMyPeerId] = useState('')
   const [participants, setParticipantis] = useState<string[]>([])
   const [myName, setMyName] = useState('')
+  const [peerMuteMap, setPeerMuteMap] = useState<{ [id: string]: boolean }>({})
   const audioRefs = useRef<HTMLAudioElement[]>([])
   const connectedIds = useRef<string[]>([])
   const [isMuted, setIsMuted] = useState(false)
@@ -24,8 +27,14 @@ export default function CallScreen() {
     if (audioTrack) {
       audioTrack.enabled = !audioTrack.enabled
       setIsMuted(!audioTrack.enabled)
+
+//       ミュートの切り替え
+sendMuteStatus(!audioTrack.enabled)
     }
   }
+
+  const updateMuteStatus = (peerId: string, isMuted: boolean) => {
+    setPeerMuteMap((prev) => ({ ...prev, [peerId]: isMuted }))
 
   useEffect(() => {
     const name = localStorage.getItem('my_name')
@@ -52,6 +61,10 @@ export default function CallScreen() {
       },
       onPeerOpen: (Id) => {
         setMyPeerId(Id)
+
+	onReciveMuteStatus: (peerId, isMuted) => {
+	  updateMuteStatus(peerId, isMuted)
+	}
 
         const peerList = JSON.parse(
           localStorage.getItem(`peers_${roomCode}`) || '[]'
@@ -134,6 +147,12 @@ export default function CallScreen() {
       <button onClick={toggleMic}>
         {isMuted ? '🔇 ミュート中' : '🎤 ミュート解除'}
       </button>
+
+      {/* {Object.entries(peerMuteMap).map(([peerId, isMuted]) => (
+  <div key={peerId}>
+    {peerId} {isMuted ? "🔇 ミュート中" : "🎤 通話中"}
+  </div>
+))} */}
 
       <button onClick={leaveRoom} className={styles.button}>
         退出
