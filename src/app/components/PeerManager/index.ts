@@ -12,13 +12,14 @@ type Options = {
 
 let currentRoomCode = ''
 
-export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStream,onReciveMuteStatus }: Options) =>( {
+export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStream,onReciveMuteStatus,onReceiveUserName }: Options) =>( {
 	
 	  roomCode,
 	  onReceiveStream,
 	  onPeerOpen,
     onLocalStream,
     onReciveMuteStatus,
+    onReceiveUserName,
 
 	}: {
 	  roomCode: string;
@@ -26,6 +27,7 @@ export const initPeer = async ({roomCode, onReceiveStream, onPeerOpen,onLocalStr
 	  onPeerOpen: (id: string) => void;
     onLocalStream: (stream: MediaStream) => void;
     onReciveMuteStatus?:(peerId:string,isMuted:boolean) => void
+    onReceiveUserName?:(peerId:string,name:string) => void
 	}) => {
 	  currentRoomCode = roomCode
   
@@ -67,6 +69,8 @@ peer?.on("connection", (conn) => {
   conn.on("data", (data) => {
   if (data.type === "mute-status"){
     onReciveMuteStatus?.(conn.peer,data.isMuted)
+  }else if (data.type === "user-name"){
+    onReceiveUserName?.(conn.peer,data.name)
   }
   }  )
 
@@ -112,3 +116,15 @@ export const removePeerId = (roomCode: string, peerId: string) => {
   const newPeers = peers.filter((id) => id !== peerId)
   localStorage.setItem(key, JSON.stringify(newPeers))
 }
+
+export const sendUserName = (name: string) => {
+  Object.values(dataConnections).forEach((conn) => {
+    conn.send({
+      type: "user-name",
+      name,
+    })
+    })
+}
+
+
+  

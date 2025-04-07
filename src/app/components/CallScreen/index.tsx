@@ -14,6 +14,7 @@ export default function CallScreen() {
   const [myPeerId, setMyPeerId] = useState('')
   const [participants, setParticipantis] = useState<string[]>([])
   const [myName, setMyName] = useState('')
+  const [userNmaes, setUserNames] = useState<{ [id: string]: string }>({})
   const [peerMuteMap, setPeerMuteMap] = useState<{ [id: string]: boolean }>({})
   const audioRefs = useRef<HTMLAudioElement[]>([])
   const connectedIds = useRef<string[]>([])
@@ -31,6 +32,10 @@ export default function CallScreen() {
 //       ミュートの切り替え
 sendMuteStatus(!audioTrack.enabled)
     }
+  }
+
+const updataUserName = (peerId: string, name: string) => {
+    setUserNames((prev) => ({ ...prev, [peerId]: name }))
   }
 
   const updateMuteStatus = (peerId: string, isMuted: boolean) => {
