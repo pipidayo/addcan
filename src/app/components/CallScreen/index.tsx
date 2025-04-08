@@ -2,9 +2,10 @@
 import styles from './styles.module.css'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
-import { initPeer, callPeer, disconnectAll } from '../PeerManager'
+import { initPeer, callPeer, disconnectAll, sendUserName } from '../PeerManager'
 import { on } from 'events'
 import { send } from 'process'
+import { sendMuteStatus } from '../PeerManager'
 import { sendMuteStatus } from '../PeerManager'
 
 export default function CallScreen() {
@@ -71,6 +72,19 @@ const updataUserName = (peerId: string, name: string) => {
 	  updateMuteStatus(peerId, isMuted)
 	}
 
+onReceiveUserName: (peerId, name) => {
+  updataUserName(peerId, name)
+}
+
+sendUserName(yourName)
+}[])
+
+onPeerDisconnect: (peerId) => {
+  removePeer(peerId)
+}
+  
+
+
         const peerList = JSON.parse(
           localStorage.getItem(`peers_${roomCode}`) || '[]'
         )
@@ -134,6 +148,24 @@ const updataUserName = (peerId: string, name: string) => {
     router.push('/')
   }
 
+const removePeer = (peerId: string) => {
+setPeerMuteMap((prev) => {
+  const newMap = { ...prev }
+  delete newMap[peerId]
+  return newMap
+})
+
+setUserNames((prev) => {
+  const newMap = { ...prev }
+  delete newMap[peerId]
+  return newMap
+})
+
+}
+
+
+
+
   return (
     <div className={styles.container}>
       <h1>通話画面</h1>
@@ -153,11 +185,15 @@ const updataUserName = (peerId: string, name: string) => {
         {isMuted ? '🔇 ミュート中' : '🎤 ミュート解除'}
       </button>
 
-      {/* {Object.entries(peerMuteMap).map(([peerId, isMuted]) => (
-  <div key={peerId}>
-    {peerId} {isMuted ? "🔇 ミュート中" : "🎤 通話中"}
-  </div>
-))} */}
+  
+
+
+{/* <div>
+  <div>👤 あなた: {yourName}</div>
+  {Object.entries(userNames).map(([peerId, name]) => (
+    <div key={peerId}>👤 {name} {peerMuteMap[peerId] ? "🔇" : "🎤"}</div>
+  ))}
+</div> */}
 
       <button onClick={leaveRoom} className={styles.button}>
         退出
