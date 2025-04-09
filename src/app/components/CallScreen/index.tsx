@@ -2,11 +2,10 @@
 import styles from './styles.module.css'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
-import PeerManager, {
+import {
   initPeer,
   callPeer,
   disconnectAll,
-  sendUserName,
   sendMuteStatus,
 } from '../PeerManager'
 import io, { Socket } from 'socket.io-client'
@@ -181,7 +180,10 @@ export default function CallScreen() {
         // 新しい参加者に接続 (PeerManager 経由で発信)
         console.log(`CallScreen: Attempting to call new peer: ${peerId}`)
         callPeer(peerId).catch((error) => {
-          /* ... */
+          console.error(
+            `CallScreen: Failed to call existing peer ${peerId}:`,
+            error
+          )
         })
       })
 
@@ -233,7 +235,10 @@ export default function CallScreen() {
     const initialize = async () => {
       try {
         // PeerManager の initPeer を呼び出し
-        const peerId = await initPeer(
+
+        // const peerId =
+
+        await initPeer(
           {
             // initPeer を直接呼び出す
             roomCode: roomCode,
@@ -245,13 +250,13 @@ export default function CallScreen() {
                 const audio = new Audio()
                 audio.srcObject = stream
                 audio.dataset.peerId = peerId
-                // 音声が再生されない場合があるため、ユーザー操作後に再生するなどの工夫が必要な場合あり
                 audio
                   .play()
                   .catch((e) => console.error('Audio play failed:', e))
                 audioRefs.current[peerId] = audio
               }
             },
+
             onPeerOpen: (id) => {
               if (!isMounted) return
               console.log('CallScreen: Peer opened with ID:', id)
@@ -268,16 +273,14 @@ export default function CallScreen() {
               })
               setupWebSocketListeners(id)
             },
-
             onLocalStream: (stream) => {
               if (!isMounted) return
               console.log('CallScreen: Local stream obtained.')
               localStreamRef.current = stream
               const audioTrack = stream.getAudioTracks()[0]
               if (audioTrack) {
-                const initialMuteState = isMuted // この時点での isMuted state を使う
+                const initialMuteState = isMuted
                 audioTrack.enabled = !initialMuteState
-                //  participants state の自分のミュート状態も更新 (念のため)
                 setParticipants((prev) =>
                   prev.map((p) =>
                     p.isSelf ? { ...p, isMuted: initialMuteState } : p
@@ -342,8 +345,8 @@ export default function CallScreen() {
       localStreamRef.current = null
       myPeerIdRef.current = '' // ref をリセット
     }
-    // }, [roomCode, router, isMuted, updateUserName, updateMuteStatus, removePeer]); // 依存配列を見直し
-  }, [roomCode, router]) // router 以外の state 更新関数は useCallback でメモ化されていれば不要
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomCode, router]) // isMuted は意図的に除外
 
   // 退出処理
   const leaveRoom = useCallback(() => {

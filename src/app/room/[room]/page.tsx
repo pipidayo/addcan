@@ -1,5 +1,5 @@
 'use client'
-import { useRouter, useParams } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import RoomHeader from '@/app/components/RoomHeader'
 import CallScreen from '@/app/components/CallScreen'
 import styles from './styles.module.css'
@@ -9,7 +9,8 @@ export default function RoomPage() {
   const roomCode = Array.isArray(roomCodeParam)
     ? roomCodeParam[0]
     : roomCodeParam
-  const router = useRouter()
+
+  // const router = useRouter()
 
   // roomCode が取得できていない場合は早期リターンまたはエラー表示
   if (!roomCode) {
@@ -21,8 +22,6 @@ export default function RoomPage() {
     <div className={styles.container}>
       {/* RoomHeader は必要に応じて残す or CallScreen 内に統合 */}
       <RoomHeader roomCode={roomCode} />
-      {/* VoiceChat の代わりに CallScreen をレンダリング */}
-      {/* <VoiceChat roomCode={roomCode} /> */}
       <CallScreen /> {/* ★ CallScreen を使用 (props は不要) */}
     </div>
   )

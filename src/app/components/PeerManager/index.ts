@@ -24,13 +24,19 @@ class PeerManager {
   private currentRoomCode = ''
   private options: Options | null = null // オプションを保持
   private myName = '' // 自分の名前を保持 (sendUserName で使うため)
+  private isMuted = false // ミュート状態を保持
 
   // ピアの初期化
-  async initPeer(options: Options, myName: string): Promise<string> {
+  async initPeer(
+    options: Options,
+    myName: string,
+    initialIsMuted: boolean = false
+  ): Promise<string> {
     // myName を引数に追加
     this.options = options
     this.currentRoomCode = options.roomCode
     this.myName = myName // 名前を保持
+    this.isMuted = initialIsMuted // 受け取った初期状態で内部状態を設定
 
     // 既存の接続があれば切断
     this.disconnectAll()
@@ -163,14 +169,30 @@ class PeerManager {
       this.dataConnections[dataConn.peer] = dataConn // 開いたら管理リストに追加
       // 接続確立後に自分の名前とミュート状態を送信
       this.sendMessage('USER_NAME', this.myName, dataConn.peer)
-      // this.sendMessage('MUTE_STATUS', isMuted, dataConn.peer); // isMuted の状態を取得する必要あり
+      this.sendMessage('MUTE_STATUS', this.isMuted, dataConn.peer)
     })
+
+    // +++ 型ガード関数を追加 (クラスの外、またはクラス内の private メソッドとして) +++
+    function isMessage(data: unknown): data is Message {
+      if (typeof data === 'object' && data === null) return false
+      const msg = data as any // 一時的に any を使用してプロパティアクセス
+      if (typeof msg.type !== 'string' || !('payload' in msg)) return false
+      switch (msg.type) {
+        case 'USER_NAME':
+          return typeof msg.payload === 'string'
+        case 'MUTE_STATUS':
+          return typeof msg.payload === 'boolean'
+        default:
+          return false // 不明なタイプ
+      }
+    }
 
     // データを受信したときのイベント
     dataConn.on('data', (data) => {
       console.log(`PeerManager: Received data from ${dataConn.peer}:`, data)
-      try {
-        const message = data as Message // 型アサーション (より安全な型ガード推奨)
+      if (isMessage(data)) {
+        //  型ガード関数でチェック
+        const message = data // チェック後は安全に Message 型として扱える
         if (this.options) {
           switch (message.type) {
             case 'USER_NAME':
@@ -179,15 +201,10 @@ class PeerManager {
             case 'MUTE_STATUS':
               this.options.onReceiveMuteStatus(dataConn.peer, message.payload)
               break
-            default:
-              console.warn(
-                'PeerManager: Received unknown message type:',
-                message
-              )
           }
         }
-      } catch (error) {
-        console.error('PeerManager: Error processing received data:', error)
+      } else {
+        console.warn('PeerManager: Received unknown message type:', data)
       }
     })
 
@@ -252,6 +269,7 @@ class PeerManager {
 
   // ミュート状態を送信する関数 (外部から呼び出す用)
   sendMuteStatus(isMuted: boolean) {
+    this.isMuted = isMuted //  内部の isMuted プロパティも更新
     this.sendMessage('MUTE_STATUS', isMuted) // 全員に送信
   }
 
