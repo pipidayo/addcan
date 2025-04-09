@@ -2,17 +2,46 @@
 import styles from './styles.module.css'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
-// 修正された PeerManager とその関数をインポート
 import PeerManager, {
   callPeer,
   disconnectAll,
   sendUserName,
   sendMuteStatus,
 } from '../PeerManager'
-import io, { Socket } from 'socket.io-client' // socket.io-client をインポート
-
+import io, { Socket } from 'socket.io-client'
 // WebSocket サーバーの URL (環境変数などから取得するのが望ましい)
-const WEBSOCKET_SERVER_URL = 'http://localhost:3001' // サーバーを起動している URL に合わせる
+const WEBSOCKET_SERVER_URL = process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 'http://localhost:3001'
+// ↑ 環境変数が設定されていない場合のデフォルト値も指定しておく
+interface Participant {
+  id: string
+  name: string
+  isMuted: boolean
+  isSelf: boolean
+}
+
+interface UserJoinedPayload {
+  peerId: string
+  name: string
+}
+
+interface UserLeftPayload {
+  peerId: string
+}
+
+interface ExistingParticipantsPayload {
+  [id: string]: string 
+}
+
+interface JoinRoomPayload {
+  roomCode: string | undefined
+  peerId: string
+  name: string
+}
+
+interface LeaveRoomPayload {
+  roomCode: string | undefined
+  peerId: string
+}
 
 export default function CallScreen() {
   const { room: roomCodeParam } = useParams()
@@ -24,11 +53,8 @@ export default function CallScreen() {
 
   const [myPeerId, setMyPeerId] = useState('')
   const [myName, setMyName] = useState('')
-  const [userNames, setUserNames] = useState<{ [id: string]: string }>({}) // ピアIDと名前のマッピング (参加者管理)
-  const [peerMuteMap, setPeerMuteMap] = useState<{ [id: string]: boolean }>({}) // ピアIDとミュート状態
+  const [participants, setParticipants] = useState<Participant[]>([]) 
   const audioRefs = useRef<{ [id: string]: HTMLAudioElement }>({}) // IDでオーディオ要素を管理
-  // connectedIds は不要になる (接続管理は PeerManager と WebSocket で行う)
-  // const connectedIds = useRef<string[]>([]);
   const [isMuted, setIsMuted] = useState(false)
   const localStreamRef = useRef<MediaStream | null>(null)
   const myPeerIdRef = useRef<string>('') // クリーンアップ用
@@ -48,32 +74,33 @@ export default function CallScreen() {
     }
   }, []) // 依存配列は空
 
-  // 他のピアの名前を更新する関数
-  const updateUserName = useCallback((peerId: string, name: string) => {
-    console.log(`CallScreen: Updating username for ${peerId}: ${name}`)
-    setUserNames((prev) => ({ ...prev, [peerId]: name }))
-  }, [])
-
-  // 他のピアのミュート状態を更新する関数
-  const updateMuteStatus = useCallback((peerId: string, isMuted: boolean) => {
-    console.log(`CallScreen: Updating mute status for ${peerId}: ${isMuted}`)
-    setPeerMuteMap((prev) => ({ ...prev, [peerId]: isMuted }))
-  }, [])
+  const upsertParticipant = useCallback((participantData: Partial<Participant> & { id: string }) => {
+    setParticipants(prev => {
+      const existingIndex = prev.findIndex(p => p.id === participantData.id)
+      if (existingIndex > -1) {
+        // 存在する場合は更新
+        const updatedParticipants = [...prev]
+        updatedParticipants[existingIndex] = { ...updatedParticipants[existingIndex], ...participantData }
+        return updatedParticipants
+      } else {
+        // 存在しない場合は追加 (isSelf は false がデフォルト、必要なら呼び出し元で指定)
+        const newParticipant: Participant = {
+          id: participantData.id,
+          name: participantData.name || 'Unknown', // 名前がない場合のデフォルト
+          isMuted: participantData.isMuted ?? false, // ミュート状態がない場合のデフォルト
+          isSelf: participantData.isSelf ?? false,
+        }
+        return [...prev, newParticipant]
+      }
+    })
+  }, []) // 依存配列は空
 
   // ピアが切断されたときに状態から削除する関数
   const removePeer = useCallback((peerId: string) => {
     console.log(`CallScreen: Removing peer: ${peerId}`)
-    setPeerMuteMap((prev) => {
-      const newMap = { ...prev }
-      delete newMap[peerId]
-      return newMap
-    })
-    setUserNames((prev) => {
-      const newMap = { ...prev }
-      delete newMap[peerId]
-      return newMap
-    })
-    // オーディオ要素を停止・削除
+    setParticipants(prev => prev.filter(p => p.id !== peerId))
+  
+    // オーディオ要素の停止・削除 (変更なし)
     if (audioRefs.current[peerId]) {
       const audio = audioRefs.current[peerId]
       audio.pause()
@@ -98,6 +125,7 @@ export default function CallScreen() {
       return
     }
     setMyName(nameFromStorage)
+  
 
     let isMounted = true // マウント状態を追跡
     let currentPeerId = '' // Peer ID をローカル変数で保持
@@ -115,11 +143,12 @@ export default function CallScreen() {
         console.log(
           `CallScreen: Emitting join-room with peerId: ${peerIdForSocket}`
         )
-        socket.emit('join-room', {
+        const payload: JoinRoomPayload = {
           roomCode,
           peerId: peerIdForSocket,
           name: nameFromStorage,
-        })
+        }
+        socket.emit('join-room', payload)
       })
 
       socket.on('disconnect', (reason) => {
@@ -138,24 +167,22 @@ export default function CallScreen() {
       // 他のユーザーが参加したときのイベント
       socket.on(
         'user-joined',
-        ({ peerId, name }: { peerId: string; name: string }) => {
+        (payload: UserJoinedPayload) => {
+          const { peerId, name } = payload
           if (!isMounted || peerId === currentPeerId) return // 自分自身は無視
           console.log(`CallScreen: User joined: ${name} (${peerId})`)
-          updateUserName(peerId, name) // 参加者リストに追加
+          upsertParticipant({ id: peerId, name, isMuted: false, isSelf: false }); // upsertParticipant を使用
 
           // 新しい参加者に接続 (PeerManager 経由で発信)
           console.log(`CallScreen: Attempting to call new peer: ${peerId}`)
-          callPeer(peerId).catch((error) => {
-            console.error(
-              `CallScreen: Failed to call new peer ${peerId}:`,
-              error
-            )
-          })
+          callPeer(peerId).catch((error) => {/* ... */ })
         }
       )
+      
 
       // 他のユーザーが退出したときのイベント
-      socket.on('user-left', ({ peerId }: { peerId: string }) => {
+      socket.on( 'user-left', (payload: UserLeftPayload) => {
+        const { peerId } = payload
         if (!isMounted) return
         console.log(`CallScreen: User left: ${peerId}`)
         // PeerManager 側で handleDisconnect が呼ばれるはずなので、
@@ -163,56 +190,28 @@ export default function CallScreen() {
         // removePeer(peerId); // ここでは呼ばない
       })
 
-      // 他のユーザーの名前更新イベント (PeerManager 経由で処理されるはず)
-      // socket.on('user-name-update', ({ peerId, name }: { peerId: string; name: string }) => {
-      //   if (!isMounted) return;
-      //   updateUserName(peerId, name);
-      // });
-
-      // 他のユーザーのミュート状態更新イベント (PeerManager 経由で処理されるはず)
-      // socket.on('mute-status-update', ({ peerId, isMuted }: { peerId: string; isMuted: boolean }) => {
-      //   if (!isMounted) return;
-      //   updateMuteStatus(peerId, isMuted);
-      // });
-
+  
       // 既存の参加者リストを取得するイベント
       socket.on(
         'existing-participants',
-        (participantsData: { [id: string]: string }) => {
-          // サーバーからの型に合わせる
+        (payload: ExistingParticipantsPayload) => {
           if (!isMounted) return
           console.log(
             'CallScreen: Received existing participants:',
-            participantsData
+            payload
           )
-          const initialUserNames: { [id: string]: string } = {}
-          // const initialMuteMap: { [id: string]: boolean } = {}; // ミュート状態もサーバーが送るなら追加
-          Object.entries(participantsData).forEach(([id, name]) => {
-            if (id !== currentPeerId) {
-              // 自分自身は除外
-              initialUserNames[id] = name
-              // initialMuteMap[id] = data.isMuted; // ミュート状態も受け取る場合
-
-              // 既存の参加者にも接続 (PeerManager 経由で発信)
-              console.log(`CallScreen: Attempting to call existing peer: ${id}`)
-              callPeer(id).catch((error) => {
-                console.error(
-                  `CallScreen: Failed to call existing peer ${id}:`,
-                  error
-                )
-              })
-            }
-          })
-          // 自分の名前もマージして state を更新
-          setUserNames((prev) => ({
-            ...prev,
-            ...initialUserNames,
-            [currentPeerId]: nameFromStorage,
+          const existingParticipants: Participant[] = Object.entries(payload)
+          .filter(([id]) => id !== currentPeerId)
+          .map(([id, name]) => ({
+            id, name, isMuted: false, isSelf: false,
           }))
-          // setPeerMuteMap(prev => ({ ...prev, ...initialMuteMap }));
+      
+        // ★ 自分の情報も participants state に含めるように更新
+        setParticipants(prev => {/* ... */ })
+           existingParticipants.forEach(p => { callPeer(p.id).catch(/* ... */) })       
         }
       )
-    }
+      
 
     // PeerJS の初期化
     const initialize = async () => {
@@ -243,27 +242,35 @@ export default function CallScreen() {
               currentPeerId = id // ローカル変数に保持
               setMyPeerId(id)
               myPeerIdRef.current = id
-              setUserNames((prev) => ({ ...prev, [id]: nameFromStorage })) // 自分の名前をマップに追加
+             
+  upsertParticipant({ //  自分自身を participants に追加
+    id,
+    name: nameFromStorage,
+    isMuted: isMuted, // この時点での isMuted state を参照
+    isSelf: true,
+  })
+  setupWebSocketListeners(id)
+},
 
-              // WebSocket リスナーを設定 (Peer ID 確定後)
-              setupWebSocketListeners(id)
-            },
             onLocalStream: (stream) => {
               if (!isMounted) return
               console.log('CallScreen: Local stream obtained.')
               localStreamRef.current = stream
               const audioTrack = stream.getAudioTracks()[0]
               if (audioTrack) {
-                audioTrack.enabled = !isMuted // 初期ミュート状態を適用
+                const initialMuteState = isMuted; // この時点での isMuted state を使う
+                audioTrack.enabled = !initialMuteState;
+                //  participants state の自分のミュート状態も更新 (念のため)
+                setParticipants(prev => prev.map(p => p.isSelf ? { ...p, isMuted: initialMuteState } : p));
               }
             },
             onReceiveUserName: (peerId, name) => {
               if (!isMounted) return
-              updateUserName(peerId, name)
+              upsertParticipant({ id: peerId, name })
             },
             onReceiveMuteStatus: (peerId, isMuted) => {
               if (!isMounted) return
-              updateMuteStatus(peerId, isMuted)
+              upsertParticipant({ id: peerId, isMuted })
             },
             onPeerDisconnect: (peerId) => {
               if (!isMounted) return
@@ -291,10 +298,11 @@ export default function CallScreen() {
       console.log('CallScreen: Cleaning up...')
       // WebSocket 接続を切断
       const currentPeerIdForCleanup = myPeerIdRef.current // ref から取得
-      socketRef.current?.emit('leave-room', {
+      const payload: LeaveRoomPayload = {
         roomCode,
         peerId: currentPeerIdForCleanup,
-      })
+      }
+      socketRef.current?.emit('leave-room',payload) 
       socketRef.current?.disconnect()
       socketRef.current = null
       console.log('CallScreen: WebSocket disconnected on cleanup.')
@@ -319,15 +327,17 @@ export default function CallScreen() {
   // 退出処理
   const leaveRoom = useCallback(() => {
     console.log('CallScreen: Leaving room...')
-    // WebSocket で退出を通知
-    socketRef.current?.emit('leave-room', {
+    const payload: LeaveRoomPayload = {
       roomCode,
       peerId: myPeerIdRef.current,
-    })
+    }
+    // WebSocket で退出を通知
+    socketRef.current?.emit('leave-room',payload) 
     // PeerManager の切断処理
     disconnectAll()
     router.push('/')
   }, [roomCode, router])
+
 
   return (
     <div className={styles.container}>
@@ -337,22 +347,15 @@ export default function CallScreen() {
 
       <h2>参加者リスト</h2>
       <ul>
-        {Object.entries(userNames)
-          // .filter(([id]) => id !== myPeerId) // 自分を表示しない場合
-          .map(([id, name]) => (
-            <li key={id}>
-              {name} {id === myPeerId ? '(あなた)' : ''}{' '}
-              {/* ミュート状態を表示 (自分自身は isMuted state を参照) */}
-              {id === myPeerId
-                ? isMuted
-                  ? '🔇'
-                  : '🎤'
-                : peerMuteMap[id]
-                  ? '🔇'
-                  : '🎤'}
-            </li>
-          ))}
-      </ul>
+  {/* ★ participants state を使ってリストをレンダリング */}
+  {participants.map((p) => (
+      <li key={p.id}>
+        {p.name} {p.isSelf ? '(あなた)' : ''}{' '}
+        {/* ★ isMuted プロパティを参照 */}
+        {p.isMuted ? '🔇' : '🎤'}
+      </li>
+    ))}
+</ul>
       <button
         onClick={toggleMic}
         className={styles.button}
