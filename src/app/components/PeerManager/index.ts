@@ -146,17 +146,27 @@ class PeerManager {
   // ローカルメディアストリームを取得するヘルパー関数
   private async getLocalStream(): Promise<MediaStream> {
     if (this.localStream) {
+      console.log('PeerManager: Returning cached local stream.') // ★ 追加
       return this.localStream
     }
     try {
-      console.log('PeerManager: Requesting local media stream...')
+      console.log(
+        'PeerManager: Requesting local media stream (getUserMedia)...'
+      ) // ★ 追加
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      console.log('PeerManager: getUserMedia successful!') // ★ 追加
       this.localStream = stream
       this.options?.onLocalStream(stream) // 外部にローカルストリームを通知
-      console.log('PeerManager: Local media stream obtained.')
+      console.log('PeerManager: Local media stream obtained and notified.') // ★ 追加
       return stream
     } catch (err) {
       console.error('PeerManager: Failed to get local media stream:', err)
+      // ★ エラーの種類を特定するログを追加
+      if (err instanceof Error) {
+        console.error(
+          `PeerManager: getUserMedia Error name: ${err.name}, message: ${err.message}`
+        )
+      }
       throw err // エラーを再スロー
     }
   }

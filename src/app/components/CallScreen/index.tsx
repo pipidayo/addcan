@@ -143,6 +143,10 @@ export default function CallScreen() {
 
     // WebSocket イベントリスナー設定
     const setupWebSocketListeners = (peerIdForSocket: string) => {
+      //  リスナー設定直前のログを追加
+      console.log(
+        `CallScreen: Setting up 'connect' listener for socket ID: ${socket.id}`
+      )
       socket.on('connect', () => {
         console.log('CallScreen: WebSocket connected:', socket.id)
         // サーバーにルーム参加を通知 (Peer ID 確定後)
@@ -302,7 +306,8 @@ export default function CallScreen() {
             },
             // --- ここまでコールバック ---
           },
-          nameFromStorage
+          nameFromStorage,
+          isMuted
         ) // 自分の名前を渡す
       } catch (error) {
         console.error('CallScreen: PeerJS initialization failed:', error)
