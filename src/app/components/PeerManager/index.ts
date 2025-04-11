@@ -33,13 +33,16 @@ class PeerManager {
     initialIsMuted: boolean = false
   ): Promise<string> {
     // myName を引数に追加
+    // ★★★ ログ追加: options が設定されたことを確認 ★★★
+    console.log('[PeerManager initPeer] Options set:', options) // this.options ではなく引数をログ
     this.options = options
     this.currentRoomCode = options.roomCode
     this.myName = myName // 名前を保持
     this.isMuted = initialIsMuted // 受け取った初期状態で内部状態を設定
 
+    // ★★★ disconnectAll() の呼び出しを削除 ★★★
     // 既存の接続があれば切断
-    this.disconnectAll()
+    // this.disconnectAll()← この行を削除またはコメントアウト
 
     return new Promise<string>(async (resolve, reject) => {
       try {
@@ -48,6 +51,9 @@ class PeerManager {
 
         // Peer がサーバーに接続し、ID が割り当てられたときのイベント
         this.peer.on('open', (id) => {
+          console.warn(
+            '[PeerManager initPeer] Existing peer found and destroying it first.'
+          )
           console.log('PeerManager: Peer opened with ID:', id)
           options.onPeerOpen(id) // 外部に自分の ID を通知
           resolve(id) // Promise を解決
@@ -96,6 +102,9 @@ class PeerManager {
               `PeerManager: Media connection established with ${call.peer}`
             )
           } catch (err) {
+            console.warn(
+              '[PeerManager initPeer] Existing peer found and destroying it first.'
+            )
             console.error('PeerManager: Error answering call:', err)
           }
         })
@@ -321,7 +330,27 @@ class PeerManager {
 
   // 他のピアに発信する関数
   async callPeer(targetId: string) {
+    // ★★★ ログ追加 ★★★
+    console.log(
+      `[PeerManager] callPeer START for ${targetId}. this.peer:`,
+      this.peer,
+      'this.options:',
+      this.options
+    )
+
+    // ★★★ ログ追加 ★★★
+    console.log(
+      `[PeerManager] Checking peer and options before call to ${targetId}`
+    )
     if (!this.peer || !this.options) {
+      // ★★★ この警告が出る前の this.peer と this.options を確認 ★★★
+      console.warn(
+        `PeerManager: Cannot call peer ${targetId}. Peer not initialized or options missing. Peer:`,
+        this.peer,
+        'Options:',
+        this.options
+      )
+
       console.warn(
         `PeerManager: Cannot call peer ${targetId}. Peer not initialized or options missing.`
       )

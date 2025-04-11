@@ -13,10 +13,16 @@ const io = new Server(httpServer, {
 const rooms = {}
 
 io.on('connection', (socket) => {
+  //  このログが表示されるか確認
+  console.log(`Connection handler started for socket ID: ${socket.id}`)
   console.log(`User connected: ${socket.id}`)
 
   // ルーム参加イベント
   socket.on('join-room', ({ roomCode, peerId, name }) => {
+    //  このログが表示されるか確認
+    console.log(
+      `[Server] Received join-room from ${peerId} for room ${roomCode}`
+    )
     console.log(`${name} (${peerId}) joined room: ${roomCode}`)
     socket.join(roomCode)
 
@@ -31,12 +37,22 @@ io.on('connection', (socket) => {
     // 既存の参加者情報を送信
     socket.emit('existing-participants', rooms[roomCode].participants)
 
+    // ★★★ ログ追加 ★★★
+    console.log(
+      `[Server] Broadcasting 'user-joined' to room ${roomCode}. Payload:`,
+      { peerId, name }
+    )
+
     // 他の参加者に通知
     socket.to(roomCode).emit('user-joined', { peerId, name })
   })
 
   // ルーム退出イベント
   socket.on('leave-room', ({ roomCode, peerId }) => {
+    //  このログが表示されるか確認
+    console.log(
+      `[Server] Received leave-room from ${peerId} for room ${roomCode}`
+    )
     console.log(`${peerId} left room: ${roomCode}`)
     socket.leave(roomCode)
 
@@ -60,6 +76,8 @@ io.on('connection', (socket) => {
 
   // 切断イベント
   socket.on('disconnect', () => {
+    //  このログが表示されるか確認
+    console.log(`[Server] disconnect event for socket ID: ${socket.id}`)
     console.log(`User disconnected: ${socket.id}`)
     // 退出処理 (どのルームから退出したか不明なので、全ルームをチェック)
     for (const roomCode in rooms) {
@@ -76,6 +94,10 @@ io.on('connection', (socket) => {
       }
     }
   })
+  // 接続ハンドラの最後にログを追加
+  console.log(
+    `Connection handler finished setting up listeners for socket ID: ${socket.id}`
+  )
 })
 
 const PORT = 3001
