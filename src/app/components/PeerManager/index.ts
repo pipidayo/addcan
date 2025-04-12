@@ -16,6 +16,32 @@ type Options = {
   onPeerDisconnect: (peerId: string) => void // 相手が切断した時
 }
 
+// +++ isMessage 型ガード関数をクラスの外に移動 (または private static メソッドにする) +++
+function isMessage(data: unknown): data is Message {
+  // Check if data is a non-null object
+  if (typeof data !== 'object' || data === null) {
+    return false
+  }
+
+  // Check if 'type' and 'payload' properties exist
+  if (!('type' in data) || !('payload' in data)) {
+    return false
+  }
+
+  // Check the type property and corresponding payload type
+  // Cast 'data' carefully here to access 'type' and 'payload'
+  const potentialMessage = data as { type: unknown; payload: unknown }
+
+  switch (potentialMessage.type) {
+    case 'USER_NAME':
+      return typeof potentialMessage.payload === 'string'
+    case 'MUTE_STATUS':
+      return typeof potentialMessage.payload === 'boolean'
+    default:
+      return false // Unknown type
+  }
+}
+
 class PeerManager {
   private peer: Peer | null = null
   private localStream: MediaStream | null = null
@@ -192,34 +218,21 @@ class PeerManager {
       this.sendMessage('MUTE_STATUS', this.isMuted, dataConn.peer)
     })
 
-    // +++ 型ガード関数を追加 (クラスの外、またはクラス内の private メソッドとして) +++
-    function isMessage(data: unknown): data is Message {
-      if (typeof data === 'object' && data === null) return false
-      const msg = data as any // 一時的に any を使用してプロパティアクセス
-      if (typeof msg.type !== 'string' || !('payload' in msg)) return false
-      switch (msg.type) {
-        case 'USER_NAME':
-          return typeof msg.payload === 'string'
-        case 'MUTE_STATUS':
-          return typeof msg.payload === 'boolean'
-        default:
-          return false // 不明なタイプ
-      }
-    }
-
     // データを受信したときのイベント
     dataConn.on('data', (data) => {
       console.log(`PeerManager: Received data from ${dataConn.peer}:`, data)
+      // ★★★ isMessage 型ガード関数を使用 ★★★
       if (isMessage(data)) {
-        //  型ガード関数でチェック
-        const message = data // チェック後は安全に Message 型として扱える
+        //  チェック後は安全に Message 型として扱える
         if (this.options) {
-          switch (message.type) {
+          switch (
+            data.type // data を直接使用可能
+          ) {
             case 'USER_NAME':
-              this.options.onReceiveUserName(dataConn.peer, message.payload)
+              this.options.onReceiveUserName(dataConn.peer, data.payload)
               break
             case 'MUTE_STATUS':
-              this.options.onReceiveMuteStatus(dataConn.peer, message.payload)
+              this.options.onReceiveMuteStatus(dataConn.peer, data.payload)
               break
           }
         }
@@ -244,10 +257,17 @@ class PeerManager {
   }
 
   // メッセージを特定のピアまたは全員に送信
-  private sendMessage(type: Message['type'], payload: any, targetId?: string) {
+  // ★★★ payload の型を Message['payload'] に変更 ★★★
+  private sendMessage(
+    type: Message['type'],
+    payload: Message['payload'],
+    targetId?: string
+  ) {
     if (!this.peer) return // Peer が初期化されていない場合は送信しない
 
-    const message: Message = { type, payload }
+    // 型安全のため、型とペイロードの組み合わせを保証する (キャストが必要になる場合がある)
+    const message = { type, payload } as Message
+
     try {
       if (targetId) {
         // 特定のピアに送信
@@ -295,20 +315,34 @@ class PeerManager {
 
   // データ接続を確立するヘルパー関数 (必要に応じて)
   private async connectData(targetId: string): Promise<DataConnection | null> {
-    if (!this.peer || this.dataConnections[targetId]?.open) {
-      return this.dataConnections[targetId] || null
+    // ★★★ this.peer の null チェックを追加 ★★★
+    if (!this.peer) {
+      console.warn('PeerManager: Cannot connect data. Peer not initialized.')
+      return null
     }
+    // 既に接続が開いているか確認
+    if (this.dataConnections[targetId]?.open) {
+      return this.dataConnections[targetId]
+    }
+
     return new Promise((resolve) => {
       try {
         console.log(
           `PeerManager: Attempting to establish data connection with ${targetId}`
         )
+        if (!this.peer) {
+          console.error(
+            'PeerManager: Peer became null unexpectedly before connecting data.'
+          )
+          resolve(null) // または reject(new Error(...)) など適切なエラー処理
+          return
+        }
         const dataConn = this.peer.connect(targetId)
         dataConn.on('open', () => {
           console.log(
             `PeerManager: Data connection opened with ${targetId} (on connectData)`
           )
-          this.dataConnections[targetId] = dataConn
+          // this.dataConnections[targetId] = dataConn; // setupDataConnectionHandlers 内で追加される
           this.setupDataConnectionHandlers(dataConn)
           resolve(dataConn)
         })
@@ -317,6 +351,7 @@ class PeerManager {
             `PeerManager: Failed to connect data to ${targetId}:`,
             err
           )
+          delete this.dataConnections[targetId] // エラー時はリストから削除した方が良いかも
           resolve(null) // 接続失敗
         })
       } catch (error) {
@@ -373,13 +408,23 @@ class PeerManager {
       // ローカルストリームを取得 (まだなければ)
       await this.getLocalStream()
 
+      // TypeScript のフロー解析を助けるため、または念のため再チェック
+      if (!this.peer) {
+        console.error(
+          'PeerManager: Peer became null unexpectedly before calling.'
+        )
+        return // もし null になっていたら処理中断
+      }
+
       // メディア接続 (通話) を開始
+      // ★★★ これで this.peer は null でないと TypeScript に伝わる ★★★
       const call = this.peer.call(targetId, this.localStream!)
 
       // イベントハンドラ設定
       call.on('stream', (remoteStream) => {
         console.log(`PeerManager: Received stream from ${targetId} (on call)`)
-        this.options!.onReceiveStream(remoteStream, call.peer)
+        // ここでも options が null でないことを確認 (最初のチェックで確認済みだが念のため)
+        this.options?.onReceiveStream(remoteStream, call.peer)
       })
       call.on('close', () => {
         console.log(`PeerManager: Call with ${targetId} closed (on call).`)

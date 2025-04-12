@@ -2,6 +2,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './styles.module.css'
+import io, { Socket } from 'socket.io-client'
+
+// WebSocket サーバーの URL (CallScreen と同じもの)
+const WEBSOCKET_SERVER_URL =
+  process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 'http://localhost:3001'
 
 type Props = {
   name: string // Home から name を受け取る
@@ -10,7 +15,7 @@ type Props = {
 
 export default function RoomControls({ name, router }: Props) {
   const [roomCode, setRoomCode] = useState('')
-
+  const [isCheckingRoom, setIsCheckingRoom] = useState(false) // 確認中フラグを追加
   // 部屋を作成する処理
   const handleCreateRoom = () => {
     // ★ 名前が入力されているかチェック
@@ -27,28 +32,109 @@ export default function RoomControls({ name, router }: Props) {
     router.push(`/room/${newRoomCode}`)
   }
 
-  // 部屋に参加する処理
-  const handleJoinRoom = () => {
-    // ★ 名前が入力されているかチェック
+  // 部屋に参加する処理 (async に変更し、WebSocket 確認処理を追加)
+  const handleJoinRoom = async () => {
+    // 名前とルームコードのチェック (変更なし)
     if (!name.trim()) {
       alert('名前を入力してください。')
-      return // 名前がなければ処理を中断
+      return
     }
-    // ★ ルームコードが入力されているかチェック
-    if (!roomCode.trim()) {
+    const codeToJoin = roomCode.trim()
+    if (!codeToJoin) {
       alert('ルームコードを入力してください。')
-      return // ルームコードがなければ処理を中断
+      return
     }
 
-    // ★ localStorage に名前を保存
-    localStorage.setItem('my_name', name)
-    console.log(`Saved name to localStorage: ${name}`) // 保存を確認 (デバッグ用)
+    // 確認中フラグを立てる (ボタンを無効化するため)
+    setIsCheckingRoom(true)
 
-    // TODO: (任意) 参加前に WebSocket サーバーに部屋が存在するか確認する方がより親切
-    // 例えば、サーバーに問い合わせて部屋が存在しない場合はアラートを出すなど
+    let socket: Socket | null = null // socket 変数を宣言
+    try {
+      // 一時的に WebSocket 接続を作成
+      socket = io(WEBSOCKET_SERVER_URL, {
+        reconnection: false, // 自動再接続は不要
+        timeout: 5000, // 5秒でタイムアウト
+      })
 
-    // 入力されたルームコードで画面遷移
-    router.push(`/room/${roomCode}`)
+      // 接続成功またはエラーを待つ (Promise 化)
+      await new Promise<void>((resolve, reject) => {
+        socket!.once('connect', resolve)
+        socket!.once('connect_error', (err) => {
+          console.error('Temporary socket connection error:', err)
+          reject(new Error('サーバー接続エラー')) // エラーメッセージを具体的に
+        })
+        // タイムアウト処理 (connect_error が発火しない場合もあるため)
+        const timer = setTimeout(
+          () => reject(new Error('サーバー接続タイムアウト')),
+          5000
+        )
+        socket!.once('connect', () => clearTimeout(timer)) // 接続成功したらタイマー解除
+      })
+
+      console.log(
+        '[RoomControls] Temporarily connected to WebSocket for room check.'
+      )
+
+      // サーバーに部屋の存在確認をリクエスト (Promise 化)
+      const result = await new Promise<{ exists: boolean }>(
+        (resolve, reject) => {
+          socket!.emit(
+            'check-room-exists',
+            { roomCode: codeToJoin },
+            (response: { exists: boolean } | null) => {
+              // コールバックが想定通り呼ばれたかチェック
+              if (response && typeof response.exists === 'boolean') {
+                resolve(response)
+              } else {
+                // サーバーからの応答がない、または形式が違う場合
+                reject(new Error('サーバーからの応答が不正です。'))
+              }
+            }
+          )
+          // emit に対する応答タイムアウト
+          setTimeout(() => reject(new Error('部屋確認タイムアウト')), 5000)
+          // コールバックが呼ばれたらタイマー解除 (socket.io v3以降ではackは一度しか呼ばれない)
+          // socket.io v3+ では ack は Promise を返すので、本来はそちらを使うのがモダン
+          // socket.emitWithAck('check-room-exists', { roomCode: codeToJoin }).then(resolve).catch(reject);
+          // 今回は callback 形式で実装
+          // ※ ack が呼ばれたことを確実に検知する方法が標準APIにはないため、
+          //   ここでは emitTimer の解除は省略し、エラー時の reject に任せる。
+        }
+      )
+
+      console.log(
+        `[RoomControls] Room ${codeToJoin} exists check result:`,
+        result.exists
+      )
+
+      if (result.exists) {
+        // 部屋が存在する場合のみ localStorage に保存して画面遷移
+        localStorage.setItem('my_name', name)
+        console.log(`Saved name to localStorage: ${name}`)
+        router.push(`/room/${codeToJoin}`)
+        // 遷移成功時は setIsCheckingRoom(false) は不要 (画面が変わるため)
+      } else {
+        // 部屋が存在しない場合
+        alert(`部屋コード "${codeToJoin}" は存在しません。`)
+        setIsCheckingRoom(false) // 確認完了、ボタンを有効化
+      }
+    } catch (error: unknown) {
+      // any を unknown に変更
+      console.error('Error checking room existence:', error)
+      // ★★★ error が Error インスタンスか確認 ★★★
+      let errorMessage = '不明なエラー'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      alert(`ルームが存在しません: ${errorMessage}`)
+      setIsCheckingRoom(false)
+    } finally {
+      // 確認が終わったら必ず切断
+      if (socket) {
+        console.log('[RoomControls] Disconnecting temporary WebSocket.')
+        socket.disconnect()
+      }
+    }
   }
 
   return (
@@ -56,7 +142,8 @@ export default function RoomControls({ name, router }: Props) {
       {/* disabled 属性はハンドラ内のチェックで代替できるため削除してもOK */}
       <button
         onClick={handleCreateRoom}
-        /* disabled={!name} */ className={styles.button}
+        disabled={isCheckingRoom} // 確認中は無効化
+        className={styles.button}
       >
         部屋を立てる
       </button>
@@ -66,14 +153,14 @@ export default function RoomControls({ name, router }: Props) {
         placeholder='コードを入力'
         value={roomCode}
         onChange={(e) => setRoomCode(e.target.value)}
+        disabled={isCheckingRoom} // 確認中は無効化
       />
-      {/* disabled 属性はハンドラ内のチェックで代替できるため削除してもOK */}
       <button
         onClick={handleJoinRoom}
-        /* disabled={!roomCode || !name} */
+        disabled={isCheckingRoom || !roomCode.trim() || !name.trim()} // 確認中や未入力時も無効化
         className={styles.button}
       >
-        部屋に入る
+        {isCheckingRoom ? '確認中...' : '部屋に入る'} {/* ボタン表示切替 */}
       </button>
     </div>
   )

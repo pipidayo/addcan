@@ -1,4 +1,4 @@
-// server.js
+// server.js (修正版 - check-room-exists イベントハンドラ追加)
 
 const { createServer } = require('http')
 const { Server } = require('socket.io')
@@ -17,8 +17,7 @@ io.on('connection', (socket) => {
   console.log(`Connection handler started for socket ID: ${socket.id}`)
   console.log(`User connected: ${socket.id}`)
 
-  // ★ socket オブジェクトにカスタムプロパティを追加して情報を保持
-  // (TypeScriptではないので型注釈は不要)
+  // socket オブジェクトにカスタムプロパティを追加して情報を保持
   socket.currentPeerId = null
   socket.currentRoomCode = null
 
@@ -36,7 +35,7 @@ io.on('connection', (socket) => {
       `[Server] Received join-room from ${peerId} for room ${roomCode}`
     )
 
-    // ★ socket に情報を記録
+    // socket に情報を記録
     socket.currentPeerId = peerId
     socket.currentRoomCode = roomCode
 
@@ -46,7 +45,7 @@ io.on('connection', (socket) => {
       console.log(`[Server] Room created: ${roomCode}`)
     }
 
-    // ★ 既存の参加者リストを取得 (自分自身を除く)
+    // 既存の参加者リストを取得 (自分自身を除く)
     const existingParticipants = { ...rooms[roomCode] }
     console.log(
       `[Server join-room] Preparing 'existing-participants' for ${peerId}. Data:`,
@@ -55,7 +54,7 @@ io.on('connection', (socket) => {
 
     // 部屋に参加 & 参加者を追加/更新
     socket.join(roomCode)
-    // ★ 既に同じ Peer ID があれば名前を更新、なければ追加
+    // 既に同じ Peer ID があれば名前を更新、なければ追加
     rooms[roomCode][peerId] = name
     console.log(`${name} (${peerId}) joined/updated room: ${roomCode}`)
     console.log(
@@ -70,9 +69,8 @@ io.on('connection', (socket) => {
     )
     socket.to(roomCode).emit('user-joined', { peerId, name }) // socket.to() は自分以外の全員に送信
 
-    // ★ 参加者に既存の参加者リストを送信 (自分自身を除外したリストを送信)
+    // 参加者に既存の参加者リストを送信 (自分自身を除外したリストを送信)
     const participantsToSend = { ...existingParticipants } // コピーを作成
-    // delete participantsToSend[peerId]; // クライアント側でフィルターするので、ここでは削除しなくても良いかも
     console.log(
       `[Server join-room] Sending 'existing-participants' to ${peerId}. Payload:`,
       JSON.stringify(participantsToSend)
@@ -80,10 +78,36 @@ io.on('connection', (socket) => {
     socket.emit('existing-participants', participantsToSend)
   })
 
+  // ★★★ ここから追加: 部屋存在確認イベント ★★★
+  socket.on('check-room-exists', ({ roomCode }, callback) => {
+    if (!roomCode) {
+      // roomCode がなければ false を返す
+      if (typeof callback === 'function') {
+        callback({ exists: false })
+      }
+      return
+    }
+    // rooms オブジェクトに roomCode が存在するか確認 (rooms[roomCode] が undefined でないか)
+    const roomExists = rooms.hasOwnProperty(roomCode) // hasOwnProperty を使う方がより安全
+    console.log(
+      `[Server check-room-exists] Room ${roomCode} exists: ${roomExists}`
+    )
+    // 結果をコールバックでクライアントに返す
+    if (typeof callback === 'function') {
+      callback({ exists: roomExists })
+    } else {
+      // コールバックがない場合 (念のためログ)
+      console.warn(
+        `[Server check-room-exists] No callback provided for room check: ${roomCode}`
+      )
+    }
+  })
+  // ★★★ ここまで追加 ★★★
+
   // 切断イベント
   socket.on('disconnect', () => {
     console.log(`[Server] disconnect event for socket ID: ${socket.id}`)
-    // ★ socket に記録された情報を使用
+    // socket に記録された情報を使用
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
 
@@ -108,7 +132,6 @@ io.on('connection', (socket) => {
           `[Server disconnect] Broadcasting 'user-left' to room ${roomCode}. Payload:`,
           { peerId }
         )
-        // ★ io.to() で部屋全体に送信 (切断した本人にも送られるが、クライアント側で無視されるはず)
         io.to(roomCode).emit('user-left', { peerId })
 
         // 部屋に誰もいなくなったら部屋を削除
