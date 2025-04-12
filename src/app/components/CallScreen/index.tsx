@@ -67,6 +67,11 @@ export default function CallScreen() {
       audioTrack.enabled = newEnabledState
       const newMuteState = !newEnabledState
       setIsMuted(newMuteState)
+      // ★★★ participants state 内の自分自身の isMuted も更新 ★★★
+      setParticipants((prev) =>
+        prev.map((p) => (p.isSelf ? { ...p, isMuted: newMuteState } : p))
+      )
+
       sendMuteStatus(newMuteState)
       console.log('Mute status sent via PeerManager:', newMuteState)
     }
@@ -74,24 +79,33 @@ export default function CallScreen() {
 
   const upsertParticipant = useCallback(
     (participantData: Partial<Participant> & { id: string }) => {
+      console.log('[upsertParticipant] Called with:', participantData)
       setParticipants((prev) => {
+        console.log('[upsertParticipant] Previous state:', JSON.stringify(prev))
         const existingIndex = prev.findIndex((p) => p.id === participantData.id)
+        let newState
         if (existingIndex > -1) {
           const updatedParticipants = [...prev]
+          // ★★★ 更新時に isSelf は上書きしないように修正 ★★
+          const existingParticipant = updatedParticipants[existingIndex]
           updatedParticipants[existingIndex] = {
-            ...updatedParticipants[existingIndex],
-            ...participantData,
+            ...existingParticipant, // 既存の値をベースにする
+            ...participantData, // 新しい値で上書き
+            isSelf: existingParticipant.isSelf, // isSelf は既存の値を維持する
           }
-          return updatedParticipants
+          newState = updatedParticipants
         } else {
+          // 新規追加の場合 (変更なし)
           const newParticipant: Participant = {
             id: participantData.id,
             name: participantData.name || 'Unknown',
             isMuted: participantData.isMuted ?? false,
-            isSelf: participantData.isSelf ?? false,
+            isSelf: participantData.isSelf ?? false, // isSelf は participantData に依存
           }
-          return [...prev, newParticipant]
+          newState = [...prev, newParticipant]
         }
+        console.log('[upsertParticipant] New state:', JSON.stringify(newState))
+        return newState
       })
     },
     []
@@ -239,7 +253,7 @@ export default function CallScreen() {
         }
       )
 
-      // ★★★ 接続が確立していて Peer ID も確定したら join-room を emit ★★★
+      //  接続が確立していて Peer ID も確定したら join-room を emit
       if (socket.connected && peerIdForSocket) {
         console.log(
           `CallScreen: Emitting join-room (from setupWebSocketListeners) with peerId: ${peerIdForSocket}`
@@ -267,6 +281,10 @@ export default function CallScreen() {
     const initialize = async () => {
       try {
         // ★★★ initPeer を呼び出す (内部での disconnectAll は削除済み) ★★★
+        // initPeer に渡す直前の nameFromStorage をログ出力
+        console.log(
+          `[CallScreen initialize] Calling initPeer with name: "${nameFromStorage!}"`
+        )
         await initPeer(
           {
             roomCode: roomCode,
@@ -321,10 +339,19 @@ export default function CallScreen() {
             },
             onReceiveUserName: (peerId, name) => {
               if (!isMounted) return
+              // ★★★ チェックを削除し、常に upsertParticipant を呼ぶ ★★★
+              console.log(
+                `[CallScreen onReceiveUserName] Received name for peer ${peerId}: "${name}"`
+              )
               upsertParticipant({ id: peerId, name })
             },
+
             onReceiveMuteStatus: (peerId, isMuted) => {
               if (!isMounted) return
+              // ★★★ チェックを削除し、常に upsertParticipant を呼ぶ ★★★
+              console.log(
+                `[CallScreen onReceiveMuteStatus] Received mute status for peer ${peerId}: ${isMuted}`
+              )
               upsertParticipant({ id: peerId, isMuted })
             },
             onPeerDisconnect: (peerId) => {

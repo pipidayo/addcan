@@ -33,16 +33,14 @@ class PeerManager {
     initialIsMuted: boolean = false
   ): Promise<string> {
     // myName を引数に追加
+
     // ★★★ ログ追加: options が設定されたことを確認 ★★★
     console.log('[PeerManager initPeer] Options set:', options) // this.options ではなく引数をログ
     this.options = options
     this.currentRoomCode = options.roomCode
+
     this.myName = myName // 名前を保持
     this.isMuted = initialIsMuted // 受け取った初期状態で内部状態を設定
-
-    // ★★★ disconnectAll() の呼び出しを削除 ★★★
-    // 既存の接続があれば切断
-    // this.disconnectAll()← この行を削除またはコメントアウト
 
     return new Promise<string>(async (resolve, reject) => {
       try {
@@ -51,9 +49,6 @@ class PeerManager {
 
         // Peer がサーバーに接続し、ID が割り当てられたときのイベント
         this.peer.on('open', (id) => {
-          console.warn(
-            '[PeerManager initPeer] Existing peer found and destroying it first.'
-          )
           console.log('PeerManager: Peer opened with ID:', id)
           options.onPeerOpen(id) // 外部に自分の ID を通知
           resolve(id) // Promise を解決
@@ -102,9 +97,6 @@ class PeerManager {
               `PeerManager: Media connection established with ${call.peer}`
             )
           } catch (err) {
-            console.warn(
-              '[PeerManager initPeer] Existing peer found and destroying it first.'
-            )
             console.error('PeerManager: Error answering call:', err)
           }
         })
@@ -187,7 +179,16 @@ class PeerManager {
       console.log(`PeerManager: Data connection opened with ${dataConn.peer}`)
       this.dataConnections[dataConn.peer] = dataConn // 開いたら管理リストに追加
       // 接続確立後に自分の名前とミュート状態を送信
+
+      // 送信する直前の this.myName をログ出力
+      console.log(
+        `[PeerManager onDataConnectionOpen] Sending USER_NAME. My name is: "${this.myName}" to ${dataConn.peer}`
+      )
       this.sendMessage('USER_NAME', this.myName, dataConn.peer)
+      // 送信する直前の this.isMuted をログ出力
+      console.log(
+        `[PeerManager onDataConnectionOpen] Sending MUTE_STATUS. My status is: ${this.isMuted} to ${dataConn.peer}`
+      )
       this.sendMessage('MUTE_STATUS', this.isMuted, dataConn.peer)
     })
 
