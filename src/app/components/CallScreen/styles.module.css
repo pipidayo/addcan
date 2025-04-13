@@ -1,0 +1,176 @@
+/* src/app/components/CallScreen/styles.module.css */
+
+/* --- CSS 変数 (固定色 - 暗め・さらにクリア調整) --- */
+:root {
+  /* 色 */
+  --text-color-on-light-bg: #111827;
+  --text-color-on-dark-bg: #ffffff;
+  --text-color-muted: #9ca3af;
+  --accent-color-self: #5b21b6; /* 暗めの紫 */
+  --accent-color-speaking: #059669;
+  --icon-color-muted: #dc2626;
+
+  /* ボタン色 */
+  --button-bg-rgba: 91, 33, 182, 0.55;
+  --button-text-color: var(--text-color-on-dark-bg);
+  --button-bg-hover-rgba: 76, 29, 149, 0.65;
+  --button-bg-active-rgba: 67, 20, 119, 0.75;
+
+  /* 無効ボタン */
+  --button-bg-disabled-rgba: 229, 231, 235, 0.4;
+  --button-text-disabled: #9ca3af;
+
+  /* 背景 */
+  --bg-self-rgba: 91, 33, 182, 0.5;
+  --bg-other-rgba: 255, 255, 255, 0.45;
+
+  /* ★ ボーダー色 (より繊細に) */
+  --border-color-base: rgba(0, 0, 0, 0.05)
+    --border-color-self: rgba(var(--accent-color-self), 0.5); /* ★ 紫系の薄いボーダー */
+  --border-color-button: rgba(
+    var(--accent-color-self),
+    0.3
+  ); /* ★ ボタン用の少し濃い紫系ボーダー */
+  --border-color-button-hover: rgba(var(--accent-color-self), 0.4);
+  --border-color-disabled: rgba(
+    209,
+    213,
+    219,
+    0.5
+  ); /* ★ 無効時のグレーボーダー */
+
+  /* その他 */
+  --blur-intensity: 14px;
+  --border-radius: 14px;
+  --shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --transition-duration: 0.2s;
+}
+
+/* --- スタイル定義 --- */
+
+.container {
+  padding: 20px;
+}
+
+.participantList {
+  list-style: none;
+  padding: 0;
+  margin-top: 24px;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.participantItem {
+  background-color: rgba(var(--bg-other-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--text-color-on-light-bg);
+  padding: 16px 22px;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border-color-base); /* ★ 基本ボーダー色適用 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition:
+    transform var(--transition-duration) ease,
+    box-shadow var(--transition-duration) ease,
+    background-color var(--transition-duration) ease,
+    border-color var(--transition-duration) ease;
+}
+
+.selfParticipant {
+  background-color: rgba(var(--bg-self-rgba));
+  color: var(--text-color-on-dark-bg);
+  border-color: var(--border-color-self); /* ★ 自分用ボーダー色適用 */
+}
+
+.participantName {
+  flex-grow: 1;
+  margin-right: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muteIcon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  color: var(--text-color-muted);
+  transition:
+    color var(--transition-duration) ease,
+    transform var(--transition-duration) ease;
+}
+
+.selfParticipant .muteIcon {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.muted {
+  color: var(--icon-color-muted);
+}
+
+.selfParticipant .muted {
+  color: #fca5a5;
+}
+
+.speakingParticipant {
+  box-shadow: 0 0 10px 3px rgba(var(--accent-color-speaking), 0.7);
+  border-color: rgba(
+    var(--accent-color-speaking),
+    0.3
+  ); /* ★ 話者ボーダーも色調整 */
+}
+.speakingParticipant .muteIcon:not(.muted) {
+  color: var(--accent-color-speaking);
+}
+
+/* --- ボタン共通スタイル (ボーダー色調整) --- */
+.button {
+  background-color: rgba(var(--button-bg-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--button-text-color);
+  border: 1px solid var(--border-color-button); /* ★ ボタン用ボーダー色適用 */
+  padding: 12px 20px;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 8px 5px;
+  transition: all var(--transition-duration) ease;
+  box-shadow: var(--shadow);
+}
+
+.button:hover:not(:disabled) {
+  background-color: rgba(var(--button-bg-hover-rgba));
+  border-color: var(--border-color-button-hover); /* ★ ホバー時ボーダー色適用 */
+  box-shadow:
+    0 7px 10px -3px rgba(0, 0, 0, 0.08),
+    0 4px 6px -4px rgba(0, 0, 0, 0.06);
+  transform: translateY(-2px);
+}
+
+.button:active:not(:disabled) {
+  background-color: rgba(var(--button-bg-active-rgba));
+  border-color: var(
+    --border-color-button
+  ); /* アクティブ時は通常ボーダーに戻すなど */
+  transform: translateY(0px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.button:disabled {
+  background-color: rgba(var(--button-bg-disabled-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--button-text-disabled);
+  border: 1px solid var(--border-color-disabled); /* ★ 無効時ボーダー色適用 */
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}

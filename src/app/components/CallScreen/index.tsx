@@ -440,10 +440,25 @@ export default function CallScreen() {
       <p>あなたのID: {myPeerId}</p>
 
       <h2>参加者リスト</h2>
-      <ul>
+      <ul className={styles.participantList}>
         {participants.map((p) => (
-          <li key={p.id}>
-            {p.name} {p.isSelf ? '(あなた)' : ''} {p.isMuted ? '🔇' : '🎤'}
+          <li
+            key={p.id}
+            // isSelf に応じてスタイルを適用
+            className={`${styles.participantItem} ${
+              p.isSelf ? styles.selfParticipant : ''
+            }`}
+          >
+            <span className={styles.participantName}>
+              {p.name} {p.isSelf ? '' : ''}
+            </span>
+
+            <span
+              className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+            >
+              {p.isMuted ? '🔇' : '🎤'}
+            </span>
+            {/* )} */}
           </li>
         ))}
       </ul>
