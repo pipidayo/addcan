@@ -1,20 +1,93 @@
+/* src/app/components/RoomControls/styles.module.css */
+
 .controls {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: column; /* 縦並びに変更 */
+  align-items: stretch; /* 幅を親要素に合わせる */
+  gap: 16px; /* 要素間のスペース */
+  width: 100%;
+  max-width: 360px; /* 最大幅を設定 */
 }
 
+/* --- ボタン共通スタイル (CallScreen と同じスタイルを適用) --- */
 .button {
-  padding: 10px;
-  font-size: 16px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 5px;
+  background-color: rgba(var(--button-bg-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--button-text-color);
+  border: 1px solid rgba(var(--button-border-color-rgba));
+  padding: 14px 22px; /* CallScreen と合わせる */
+  border-radius: var(--border-radius);
   cursor: pointer;
+  font-size: 1rem; /* 少し大きく */
+  font-weight: 600;
+  text-align: center; /* 文字を中央揃え */
+  transition: all var(--transition-duration) ease;
+  box-shadow: var(--shadow);
+}
+
+.button:hover:not(:disabled) {
+  background-color: rgba(var(--button-bg-hover-rgba));
+  border-color: rgba(var(--button-border-color-hover-rgba));
+  box-shadow:
+    0 7px 10px -3px rgba(0, 0, 0, 0.06),
+    0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+.button:active:not(:disabled) {
+  background-color: rgba(var(--button-bg-active-rgba));
+  border-color: rgba(var(--button-border-color-rgba));
+  transform: translateY(0px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .button:disabled {
-  background-color: #ccc;
+  background-color: rgba(var(--button-bg-disabled-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--button-text-disabled);
+  border: 1px solid rgba(var(--button-border-disabled-rgba));
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+  opacity: 0.7; /* 少し薄く */
+}
+
+.button:first-child {
+  /* 最初のボタン（部屋を立てる）を選択 */
+  margin-bottom: 8px; /* 例: 8px のマージンを追加 (gap と合わせて 16+8=24px のスペースに) */
+}
+
+/* --- 入力欄スタイル --- */
+.input {
+  background-color: rgba(var(--input-bg-rgba)); /* 半透明白背景 */
+  border: 1px solid rgba(var(--input-border-color-rgba));
+  color: var(--input-text-color);
+  padding: 14px 18px;
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  width: 100%; /* 幅を 100% に */
+  box-sizing: border-box; /* padding を含めて幅を計算 */
+  transition:
+    border-color var(--transition-duration) ease,
+    box-shadow var(--transition-duration) ease;
+  box-shadow: var(--shadow);
+}
+
+.input::placeholder {
+  color: var(--input-placeholder-color);
+  opacity: 1; /* Firefox で薄くなるのを防ぐ */
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgba(var(--input-border-color-focus-rgba));
+  box-shadow: 0 0 0 3px rgba(var(--accent-color-primary-rgb), 0.3); /* フォーカスリング */
+}
+
+.input:disabled {
+  background-color: rgba(var(--input-bg-rgba), 0.5); /* 少し暗く */
+  cursor: not-allowed;
+  opacity: 0.7;
 }

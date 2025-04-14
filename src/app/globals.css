@@ -1,13 +1,50 @@
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  /* 色 (基本) */
+  --text-color-on-light-bg: #111827; /* 濃いグレー */
+  --text-color-on-dark-bg: #ffffff; /* 白 */
+  --text-color-muted: #9ca3af; /* やや薄めのグレー */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* 色 (アクセント - 紫系) */
+  --accent-color-primary-rgb: 91, 33, 182; /* 暗めの紫 RGB (#5b21b6) */
+  --accent-color-primary-hover-rgb:
+    76, 29, 149; /* さらに濃い紫 RGB (#4c1d95) */
+  --accent-color-primary-active-rgb: 67, 20, 119; /* 最も濃い紫 RGB (#431477) */
+
+  /* 色 (アクセント - 緑系) */
+  --accent-color-speaking-rgb: 5, 150, 105; /* 緑 RGB (#059669) */
+
+  /* 色 (その他) */
+  --icon-color-muted: #dc2626; /* 赤 */
+  --border-color-subtle-rgb: 255, 255, 255; /* 白 (ボーダー用) */
+  --border-color-disabled-rgb: 209, 213, 219; /* グレー (無効時ボーダー用) */
+  --bg-disabled-rgb: 229, 231, 235; /* 薄いグレー (無効時背景用) */
+
+  /* ボタン (紫背景) */
+  --button-bg-rgba: var(--accent-color-primary-rgb), 0.55; /* 紫 + 透明度 */
+  --button-text-color: var(--text-color-on-dark-bg);
+  --button-bg-hover-rgba: var(--accent-color-primary-hover-rgb), 0.65;
+  --button-bg-active-rgba: var(--accent-color-primary-active-rgb), 0.75;
+  --button-border-color-rgba: var(--accent-color-primary-rgb), 0.4;
+  --button-border-color-hover-rgba: var(--accent-color-primary-rgb), 0.5;
+
+  /* 無効ボタン */
+  --button-bg-disabled-rgba: var(--bg-disabled-rgb), 0.4;
+  --button-text-disabled: var(--text-color-muted);
+  --button-border-disabled-rgba: var(--border-color-disabled-rgb), 0.3;
+
+  /* UI要素 */
+  --blur-intensity: 16px;
+  --border-radius: 16px; /* 角丸を少し大きく */
+  --shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+  --transition-duration: 0.2s;
+
+  /* 入力欄スタイル */
+  --input-bg-rgba: 255, 255, 255, 0.15; /* 半透明の白背景 */
+  --input-border-color-rgba: var(--border-color-subtle-rgb), 0.2;
+  --input-border-color-focus-rgba: var(--border-color-subtle-rgb), 0.5;
+  --input-text-color: var(--text-color-on-dark-bg);
+  --input-placeholder-color: rgba(255, 255, 255, 0.5);
 }
 
 html,

@@ -6,12 +6,15 @@ type Props = {
 
 export default function NameInput({ name, setName }: Props) {
   return (
-    <input
-      type='text'
-      value={name}
-      onChange={(e) => setName(e.target.value)}
-      placeholder='名前を入力'
-      className={styles.input}
-    />
+    <div className={styles.container}>
+      <input
+        type='text'
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder='名前を入力'
+        className={styles.input}
+        maxLength={16}
+      />
+    </div>
   )
 }

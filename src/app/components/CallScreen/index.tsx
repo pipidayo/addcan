@@ -79,10 +79,28 @@ export default function CallScreen() {
     dataArray: null,
     isSpeaking: false,
   })
+  const [participantVolumes, setParticipantVolumes] = useState<{
+    [id: string]: number
+  }>({})
   //  しきい値 (PeerManager と同じか、調整)
   const localSpeakingThreshold = 10
 
   // --- ここまで State と Ref 定義 ---
+
+  // 音量変更ハンドラ
+  const handleVolumeChange = (peerId: string, volume: number) => {
+    // state を更新
+    setParticipantVolumes((prev) => ({
+      ...prev,
+      [peerId]: volume,
+    }))
+
+    // 対応する audio 要素の音量を変更
+    const audioElement = audioRefs.current[peerId]
+    if (audioElement) {
+      audioElement.volume = volume // volume は 0.0 ~ 1.0
+    }
+  }
 
   // --- デバイスリスト取得関数 ---
   const getDevices = useCallback(async () => {
@@ -692,6 +710,23 @@ export default function CallScreen() {
     socketRef.current = null
     router.push('/')
   }, [router])
+
+  // 新しい参加者追加時や初期化時にデフォルト音量を設定する処理も必要になるかも
+  useEffect(() => {
+    // participants が更新されたら、新しい参加者のデフォルト音量(1.0)を設定
+    const newVolumes = { ...participantVolumes }
+    let changed = false
+    participants.forEach((p) => {
+      if (!p.isSelf && !(p.id in newVolumes)) {
+        newVolumes[p.id] = 1.0 // デフォルト音量
+        changed = true
+      }
+    })
+    if (changed) {
+      setParticipantVolumes(newVolumes)
+    }
+  }, [participants, participantVolumes])
+
   // --- ここまで退出処理 ---
 
   // --- JSX レンダリング ---
@@ -736,22 +771,49 @@ export default function CallScreen() {
       <h2>参加者リスト</h2>
       <ul className={styles.participantList}>
         {participants.map((p) => {
-          console.log(
-            `[CallScreen map] Peer: ${p.id}, isSpeaking: ${p.isSpeaking}`
-          )
+          // 自分自身にはスライダーを表示しない
+          if (p.isSelf) {
+            return (
+              <li
+                key={p.id}
+                className={`${styles.participantItem} ${styles.selfParticipant} ${
+                  p.isSpeaking ? styles.speakingParticipant : '' // 自分も光るように isSpeaking を追加
+                }`}
+              >
+                <span className={styles.participantName}>{p.name}</span>
+                <span
+                  className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+                >
+                  {p.isMuted ? '🔇' : '🎤'}
+                </span>
+              </li>
+            )
+          }
+
+          // 相手の音量を取得 (なければデフォルト 1.0)
+          const currentVolume = participantVolumes[p.id] ?? 1.0
+
           return (
             <li
               key={p.id}
-              // ★★★ isSpeaking クラスを追加 ★★★
               className={`${styles.participantItem} ${
-                p.isSelf ? styles.selfParticipant : ''
-              } ${
-                p.isSpeaking ? styles.speakingParticipant : '' // isSpeaking 状態に応じてクラスを適用
+                p.isSpeaking ? styles.speakingParticipant : ''
               }`}
             >
-              <span className={styles.participantName}>
-                {p.name} {p.isSelf ? '' : ''} {/* '(あなた)' は削除 */}
-              </span>
+              <span className={styles.participantName}>{p.name}</span>
+              {/* 音量調整スライダー */}
+              <input
+                type='range'
+                min='0'
+                max='1' // max を 1 に
+                step='0.01' // 細かく調整
+                value={currentVolume}
+                onChange={(e) =>
+                  handleVolumeChange(p.id, parseFloat(e.target.value))
+                }
+                className={styles.volumeSlider} // CSSでスタイルを調整
+                title={`音量: ${Math.round(currentVolume * 100)}%`} // ホバー時にパーセント表示
+              />
               <span
                 className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
               >
@@ -778,4 +840,4 @@ export default function CallScreen() {
     </div>
   )
   // --- ここまで JSX レンダリング ---
-}
+} // ← CallScreen コンポーネントの閉じ括弧

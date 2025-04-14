@@ -1,7 +1,31 @@
-.input {
-  padding: 10px;
-  font-size: 16px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
+/* src/app/components/NameInput/styles.module.css */
+.container {
   width: 100%;
+  max-width: 360px; /* RoomControls と同じ最大幅を設定 */
+}
+
+.input {
+  background-color: rgba(var(--input-bg-rgba));
+  border: 1px solid rgba(var(--input-border-color-rgba));
+  color: var(--input-text-color);
+  padding: 14px 18px;
+  border-radius: var(--border-radius);
+  font-size: 1rem;
+  width: 100%; /* コンテナに対して 100% */
+  box-sizing: border-box;
+  transition:
+    border-color var(--transition-duration) ease,
+    box-shadow var(--transition-duration) ease;
+  box-shadow: var(--shadow);
+}
+
+.input::placeholder {
+  color: var(--input-placeholder-color);
+  opacity: 1;
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgba(var(--input-border-color-focus-rgba));
+  box-shadow: 0 0 0 3px rgba(var(--accent-color-primary-rgb), 0.3);
 }
