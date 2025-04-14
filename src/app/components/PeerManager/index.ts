@@ -186,16 +186,29 @@ class PeerManager {
   }
 
   // ローカルメディアストリームを取得するヘルパー関数
-  private async getLocalStream(): Promise<MediaStream> {
-    if (this.localStream) {
+  private async getLocalStream(deviceId?: string): Promise<MediaStream> {
+    if (
+      this.localStream &&
+      (!deviceId ||
+        this.localStream.getAudioTracks()[0]?.getSettings().deviceId ===
+          deviceId)
+    ) {
       console.log('PeerManager: Returning cached local stream.') // ★ 追加
       return this.localStream
     }
+
     try {
       console.log(
         'PeerManager: Requesting local media stream (getUserMedia)...'
       ) // ★ 追加
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+
+      // ★★★ getUserMedia の audio 制約を修正 ★★★
+      const constraints: MediaStreamConstraints = {
+        audio: deviceId ? { deviceId: { exact: deviceId } } : true, // deviceId があれば指定
+        // video: false // 必要なら video も追加
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
       console.log('PeerManager: getUserMedia successful!') // ★ 追加
       this.localStream = stream
       this.options?.onLocalStream(stream) // 外部にローカルストリームを通知
@@ -424,12 +437,13 @@ class PeerManager {
       await this.getLocalStream()
 
       // TypeScript のフロー解析を助けるため、または念のため再チェック
-      if (!this.peer) {
-        console.error(
-          'PeerManager: Peer became null unexpectedly before calling.'
-        )
-        return // もし null になっていたら処理中断
-      }
+      if (!this.peer)
+        if (!this.localStream) {
+          console.error(
+            'PeerManager: Peer became null unexpectedly before calling.'
+          )
+          return // もし null になっていたら処理中断
+        }
 
       // メディア接続 (通話) を開始
       // ★★★ これで this.peer は null でないと TypeScript に伝わる ★★★
@@ -464,6 +478,87 @@ class PeerManager {
       console.error(`PeerManager: Error calling peer ${targetId}:`, err)
       // エラーが発生した場合、関連する接続をクリーンアップする試み
       this.handleDisconnect(targetId)
+    }
+  }
+
+  // ★★★ マイク切り替えメソッドを追加 ★★★
+  async switchMicrophone(newDeviceId: string) {
+    console.log(
+      `PeerManager: Attempting to switch microphone to ${newDeviceId}`
+    )
+    if (!this.localStream) {
+      console.warn(
+        'PeerManager: Cannot switch microphone, local stream not available.'
+      )
+      // ストリームがない場合は新たに取得するだけでも良いかも
+      await this.getLocalStream(newDeviceId)
+      return // ストリーム取得後に replaceTrack は不要
+    }
+
+    // 現在のトラックのデバイスIDと比較
+    const currentAudioTrack = this.localStream.getAudioTracks()[0]
+    if (currentAudioTrack?.getSettings().deviceId === newDeviceId) {
+      console.log('PeerManager: Selected microphone is already in use.')
+      return // 同じデバイスなら何もしない
+    }
+
+    try {
+      // 1. 新しいデバイスIDで新しいオーディオトラックを取得
+      //    getLocalStream を再利用して新しいストリームを取得し、localStream を更新
+      const newStream = await this.getLocalStream(newDeviceId)
+      const newAudioTrack = newStream.getAudioTracks()[0]
+
+      if (!newAudioTrack) {
+        throw new Error(
+          'Failed to get new audio track from the selected device.'
+        )
+      }
+
+      // 2. 既存のすべての MediaConnection でトラックを置き換える
+      for (const peerId in this.mediaConnections) {
+        const conn = this.mediaConnections[peerId]
+        // PeerJS の MediaConnection からネイティブの RTCPeerConnection を取得 (内部プロパティにアクセス)
+        const peerConnection = conn.peerConnection as
+          | RTCPeerConnection
+          | undefined
+
+        if (peerConnection) {
+          // オーディオトラックを送信している Sender を探す
+          const senders = peerConnection.getSenders()
+          const audioSender = senders.find(
+            (sender) => sender.track?.kind === 'audio'
+          )
+
+          if (audioSender) {
+            console.log(
+              `PeerManager: Replacing audio track for connection with ${peerId}`
+            )
+            await audioSender.replaceTrack(newAudioTrack)
+          } else {
+            console.warn(
+              `PeerManager: Audio sender not found for connection with ${peerId}`
+            )
+          }
+        } else {
+          console.warn(
+            `PeerManager: RTCPeerConnection not found for MediaConnection with ${peerId}`
+          )
+        }
+      }
+
+      // 3. (オプション) 自分のミュート状態などを新しいトラックに適用
+      const currentMuteState = this.isMuted // PeerManager の isMuted 状態
+      newAudioTrack.enabled = !currentMuteState
+      console.log(
+        `PeerManager: Applied mute state (${currentMuteState}) to new audio track.`
+      )
+
+      console.log('PeerManager: Microphone switched successfully.')
+    } catch (error) {
+      console.error('PeerManager: Failed to switch microphone:', error)
+      // エラー発生時の処理 (例: 古いストリームに戻す、ユーザーに通知など)
+      // 必要であれば、エラー前の localStream に戻す処理を追加
+      throw error // エラーを呼び出し元に伝える
     }
   }
 
@@ -657,3 +752,5 @@ export const sendUserName =
   peerManagerInstance.sendUserName.bind(peerManagerInstance)
 export const sendMuteStatus =
   peerManagerInstance.sendMuteStatus.bind(peerManagerInstance)
+export const switchMicrophone =
+  peerManagerInstance.switchMicrophone.bind(peerManagerInstance)
