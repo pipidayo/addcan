@@ -14,6 +14,17 @@ type Options = {
   onReceiveUserName: (peerId: string, name: string) => void // 相手の名前受信時
   onReceiveMuteStatus: (peerId: string, isMuted: boolean) => void // 相手のミュート状態受信時
   onPeerDisconnect: (peerId: string) => void // 相手が切断した時
+  onSpeakingStatusChange?: (peerId: string, isSpeaking: boolean) => void // オプショナル (?) でも OK
+}
+
+// ★★★ 音声分析関連の型 ★★★
+interface AudioAnalysisData {
+  context: AudioContext
+  analyser: AnalyserNode
+  source: MediaStreamAudioSourceNode
+  lastIsSpeaking: boolean
+  animationFrameId: number | null
+  dataArray: Uint8Array // 音量データ格納用
 }
 
 // +++ isMessage 型ガード関数をクラスの外に移動 (または private static メソッドにする) +++
@@ -51,6 +62,10 @@ class PeerManager {
   private options: Options | null = null // オプションを保持
   private myName = '' // 自分の名前を保持 (sendUserName で使うため)
   private isMuted = false // ミュート状態を保持
+  // ★★★ 音声分析リソースを管理する Map ★★★
+  private audioAnalysisMap = new Map<string, AudioAnalysisData>()
+  // ★★★ 音量検出のしきい値 (要調整) ★★★
+  private speakingThreshold = 10 // 例: 0-255 の範囲で調整
 
   // ピアの初期化
   async initPeer(
@@ -425,6 +440,8 @@ class PeerManager {
         console.log(`PeerManager: Received stream from ${targetId} (on call)`)
         // ここでも options が null でないことを確認 (最初のチェックで確認済みだが念のため)
         this.options?.onReceiveStream(remoteStream, call.peer)
+        // ★★★ 発信時にも音声分析を開始 ★★★
+        this.startVolumeAnalysis(call.peer, remoteStream)
       })
       call.on('close', () => {
         console.log(`PeerManager: Call with ${targetId} closed (on call).`)
@@ -450,10 +467,122 @@ class PeerManager {
     }
   }
 
+  // ★★★ 音声分析ループを開始する関数 ★★★
+  private startVolumeAnalysis(peerId: string, stream: MediaStream) {
+    // すでに分析中なら何もしない
+    if (this.audioAnalysisMap.has(peerId)) {
+      console.log(`PeerManager: Audio analysis already running for ${peerId}`)
+      return
+    }
+    // オーディオトラックがなければ何もしない
+    const audioTracks = stream.getAudioTracks()
+    if (audioTracks.length === 0) {
+      console.warn(`PeerManager: No audio track found for ${peerId}`)
+      return
+    }
+
+    try {
+      const context = new AudioContext()
+      const source = context.createMediaStreamSource(stream)
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 256 // データ量を減らす (32, 64, 128, 256, ...)
+      analyser.smoothingTimeConstant = 0.3 // 平滑化 (0 ~ 1)
+
+      source.connect(analyser)
+      // analyser を destination に接続しない (音は CallScreen で再生されるため)
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount)
+      const analysisData: AudioAnalysisData = {
+        context,
+        analyser,
+        source,
+        lastIsSpeaking: false,
+        animationFrameId: null,
+        dataArray,
+      }
+      this.audioAnalysisMap.set(peerId, analysisData)
+
+      const analyse = () => {
+        // 再帰的に呼び出すために animationFrameId を更新
+        analysisData.animationFrameId = requestAnimationFrame(analyse)
+
+        analyser.getByteFrequencyData(dataArray) // 周波数データを取得
+
+        // 簡単な音量計算 (例: 平均値)
+        let sum = 0
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i]
+        }
+        const average = sum / dataArray.length
+
+        // しきい値と比較して話者状態を判断
+        const isSpeaking = average > this.speakingThreshold
+
+        console.log(
+          `[PeerManager analyse] Peer: ${peerId}, Average: ${average.toFixed(2)}, Threshold: ${this.speakingThreshold}, IsSpeaking: ${isSpeaking}`
+        )
+
+        // 状態が変化した場合のみコールバックを呼び出す
+        if (isSpeaking !== analysisData.lastIsSpeaking) {
+          console.log(
+            `[PeerManager] Speaking status changed for ${peerId}: ${isSpeaking}`
+          )
+          analysisData.lastIsSpeaking = isSpeaking
+          if (this.options?.onSpeakingStatusChange) {
+            this.options.onSpeakingStatusChange(peerId, isSpeaking)
+          }
+        }
+      }
+      // 分析ループを開始
+      analyse()
+      console.log(`PeerManager: Started audio analysis for ${peerId}`)
+    } catch (error) {
+      console.error(
+        `PeerManager: Error starting audio analysis for ${peerId}:`,
+        error
+      )
+    }
+  }
+
+  // ★★★ 音声分析を停止する関数 ★★★
+  private stopVolumeAnalysis(peerId: string) {
+    const analysisData = this.audioAnalysisMap.get(peerId)
+    if (analysisData) {
+      if (analysisData.animationFrameId !== null) {
+        cancelAnimationFrame(analysisData.animationFrameId)
+        analysisData.animationFrameId = null
+      }
+      // source を切断 (必須ではないが念のため)
+      try {
+        analysisData.source.disconnect()
+      } catch {
+        /* ignore */
+      }
+      // AudioContext を閉じる (重要！)
+      analysisData.context
+        .close()
+        .then(() => {
+          console.log(`PeerManager: Closed AudioContext for ${peerId}`)
+        })
+        .catch((e) =>
+          console.error(
+            `PeerManager: Error closing AudioContext for ${peerId}:`,
+            e
+          )
+        )
+
+      this.audioAnalysisMap.delete(peerId)
+      console.log(`PeerManager: Stopped audio analysis for ${peerId}`)
+    }
+  }
+
   // 切断処理を共通化
   private handleDisconnect(peerId: string) {
     if (!peerId) return // peerId が無効なら何もしない
     console.log(`PeerManager: Handling disconnect for peer: ${peerId}`)
+
+    // ★★★ 音声分析を停止 ★★★
+    this.stopVolumeAnalysis(peerId)
 
     // MediaConnection を閉じて削除
     if (this.mediaConnections[peerId]) {
@@ -477,6 +606,13 @@ class PeerManager {
   // 全接続を切断する関数
   disconnectAll() {
     console.log('PeerManager: Disconnecting all connections...')
+
+    // ★★★ すべての音声分析を停止 ★★★
+    this.audioAnalysisMap.forEach((_, peerId) => {
+      this.stopVolumeAnalysis(peerId)
+    })
+    this.audioAnalysisMap.clear() // Map をクリア
+
     // すべての MediaConnection を閉じる
     Object.keys(this.mediaConnections).forEach((peerId) =>
       this.handleDisconnect(peerId)

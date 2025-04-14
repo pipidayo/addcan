@@ -25,8 +25,11 @@
   --bg-other-rgba: 255, 255, 255, 0.45;
 
   /* ★ ボーダー色 (より繊細に) */
-  --border-color-base: rgba(0, 0, 0, 0.05)
-    --border-color-self: rgba(var(--accent-color-self), 0.5); /* ★ 紫系の薄いボーダー */
+  --border-color-base: rgba(0, 0, 0, 0.05);
+  --border-color-self: rgba(
+    var(--accent-color-self),
+    0.5
+  ); /* ★ 紫系の薄いボーダー */
   --border-color-button: rgba(
     var(--accent-color-self),
     0.3
@@ -85,7 +88,7 @@
 .selfParticipant {
   background-color: rgba(var(--bg-self-rgba));
   color: var(--text-color-on-dark-bg);
-  border-color: var(--border-color-self); /* ★ 自分用ボーダー色適用 */
+  border-color: none; /* ★ 自分用ボーダー色適用 */
 }
 
 .participantName {
@@ -118,17 +121,18 @@
   color: #fca5a5;
 }
 
-.speakingParticipant {
+li.speakingParticipant {
+  /* 影をつける
   box-shadow: 0 0 10px 3px rgba(var(--accent-color-speaking), 0.7);
-  border-color: rgba(
-    var(--accent-color-speaking),
-    0.3
-  ); /* ★ 話者ボーダーも色調整 */
+  /* ボーダーの色を変える */
+  /* border-color: rgba(var(--accent-color-speaking), 0.3); */
+
+  box-shadow: 0 0 10px 3px var(--accent-color-speaking);
+  border-color: var(--accent-color-speaking); /* 変数を直接指定 */
 }
 .speakingParticipant .muteIcon:not(.muted) {
   color: var(--accent-color-speaking);
 }
-
 /* --- ボタン共通スタイル (ボーダー色調整) --- */
 .button {
   background-color: rgba(var(--button-bg-rgba));

@@ -5,9 +5,9 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   initPeer,
   callPeer,
-  disconnectAll, // disconnectAll をインポート
+  disconnectAll,
   sendMuteStatus,
-} from '../PeerManager'
+} from '../PeerManager' // PeerManager のインポートは変更なし
 import io, { Socket } from 'socket.io-client'
 
 // WebSocket サーバーの URL
@@ -20,6 +20,8 @@ interface Participant {
   name: string
   isMuted: boolean
   isSelf: boolean
+  // ★★★ 話者状態プロパティを追加 ★★★
+  isSpeaking?: boolean
 }
 interface UserJoinedPayload {
   peerId: string
@@ -36,7 +38,6 @@ interface JoinRoomPayload {
   peerId: string
   name: string
 }
-
 // --- ここまでインターフェース定義 ---
 
 export default function CallScreen() {
@@ -48,7 +49,7 @@ export default function CallScreen() {
 
   // --- State と Ref 定義 ---
   const socketRef = useRef<Socket | null>(null)
-  const initializedSocket = useRef(false) // Socket初期化済みフラグ
+  const initializedSocket = useRef(false)
   const [myPeerId, setMyPeerId] = useState('')
   const [myName, setMyName] = useState('')
   const [participants, setParticipants] = useState<Participant[]>([])
@@ -60,6 +61,7 @@ export default function CallScreen() {
 
   // --- useCallback フック ---
   const toggleMic = useCallback(() => {
+    // ... 変更なし ...
     if (!localStreamRef.current) return
     const audioTrack = localStreamRef.current.getAudioTracks()[0]
     if (audioTrack) {
@@ -67,11 +69,9 @@ export default function CallScreen() {
       audioTrack.enabled = newEnabledState
       const newMuteState = !newEnabledState
       setIsMuted(newMuteState)
-      // ★★★ participants state 内の自分自身の isMuted も更新 ★★★
       setParticipants((prev) =>
         prev.map((p) => (p.isSelf ? { ...p, isMuted: newMuteState } : p))
       )
-
       sendMuteStatus(newMuteState)
       console.log('Mute status sent via PeerManager:', newMuteState)
     }
@@ -79,6 +79,7 @@ export default function CallScreen() {
 
   const upsertParticipant = useCallback(
     (participantData: Partial<Participant> & { id: string }) => {
+      console.log('[upsertParticipant] Data:', participantData)
       console.log('[upsertParticipant] Called with:', participantData)
       setParticipants((prev) => {
         console.log('[upsertParticipant] Previous state:', JSON.stringify(prev))
@@ -86,21 +87,21 @@ export default function CallScreen() {
         let newState
         if (existingIndex > -1) {
           const updatedParticipants = [...prev]
-          // ★★★ 更新時に isSelf は上書きしないように修正 ★★
           const existingParticipant = updatedParticipants[existingIndex]
           updatedParticipants[existingIndex] = {
-            ...existingParticipant, // 既存の値をベースにする
-            ...participantData, // 新しい値で上書き
-            isSelf: existingParticipant.isSelf, // isSelf は既存の値を維持する
+            ...existingParticipant,
+            ...participantData,
+            isSelf: existingParticipant.isSelf,
           }
           newState = updatedParticipants
         } else {
-          // 新規追加の場合 (変更なし)
+          // ★★★ isSpeaking の初期値を追加 ★★★
           const newParticipant: Participant = {
             id: participantData.id,
             name: participantData.name || 'Unknown',
             isMuted: participantData.isMuted ?? false,
-            isSelf: participantData.isSelf ?? false, // isSelf は participantData に依存
+            isSelf: participantData.isSelf ?? false,
+            isSpeaking: participantData.isSpeaking ?? false, // isSpeaking の初期値
           }
           newState = [...prev, newParticipant]
         }
@@ -118,6 +119,8 @@ export default function CallScreen() {
       const audio = audioRefs.current[peerId]
       audio.pause()
       audio.srcObject = null
+      // ★★★ audio 要素自体を削除 ★★★
+      audio.remove() // document から削除
       delete audioRefs.current[peerId]
       console.log(`CallScreen: Removed audio for peer: ${peerId}`)
     }
@@ -126,14 +129,12 @@ export default function CallScreen() {
 
   // --- メインの useEffect (初期化処理) ---
   useEffect(() => {
-    // ★★★ useEffect の最初に前回の接続をクリーンアップ ★★★
     console.log(
       '[CallScreen useEffect] Cleaning up previous connections if any...'
     )
-    disconnectAll() // PeerJS の状態をリセット
-    // ★★★ ここまで追加 ★★★
+    disconnectAll()
 
-    // --- roomCode と name のチェック ---
+    // --- roomCode と name のチェック (変更なし) ---
     if (!roomCode) {
       alert('ルームコードがありません')
       router.push('/')
@@ -148,14 +149,13 @@ export default function CallScreen() {
     setMyName(nameFromStorage)
     // --- ここまで roomCode と name のチェック ---
 
-    // ★★★ Socket インスタンスの生成と基本リスナー設定 (初回のみ) ★★★
+    // --- Socket 初期化処理 (変更なし) ---
     if (!initializedSocket.current) {
       console.log('CallScreen: Initializing WebSocket connection (once)...')
       const socket = io(WEBSOCKET_SERVER_URL)
       socketRef.current = socket
-      initializedSocket.current = true // 初期化済みフラグを立てる
+      initializedSocket.current = true
 
-      // ★★★ 基本的なリスナーはここで設定 ★★★
       socket.on('connect', () => {
         console.log(
           '★★★ CallScreen: WebSocket connected! Socket ID:',
@@ -170,24 +170,23 @@ export default function CallScreen() {
         console.log('CallScreen: WebSocket disconnected:', reason)
       })
     }
-    // ★★★ ここまで Socket 初期化処理 ★★★
+    // --- ここまで Socket 初期化処理 ---
 
-    const socket = socketRef.current // ref から socket を取得
+    const socket = socketRef.current
     if (!socket) {
       console.error('CallScreen: Socket instance not found in ref!')
-      return // socket がなければ処理中断
+      return
     }
 
-    let isMounted = true // コールバック内で使うためのフラグ
-    let currentPeerId = '' // ローカル変数
+    let isMounted = true
+    let currentPeerId = ''
 
-    // --- WebSocket イベントリスナー設定 (connect, connect_error, disconnect 以外) ---
+    // --- WebSocket イベントリスナー設定 (変更なし) ---
     const setupWebSocketListeners = (peerIdForSocket: string) => {
       console.log(
         `CallScreen: Setting up other listeners for Peer ID: ${peerIdForSocket}`
       )
 
-      // 他のユーザーが参加したときのイベント
       socket.on('user-joined', (payload: UserJoinedPayload) => {
         console.log(
           `[CallScreen] Received 'user-joined' event. Payload:`,
@@ -196,12 +195,12 @@ export default function CallScreen() {
           isMounted,
           'currentPeerId:',
           currentPeerId
-        ) // ログ追加
+        )
         const { peerId, name } = payload
         if (!isMounted || peerId === currentPeerId) {
           console.log(
             "[CallScreen] 'user-joined' ignored (self or not mounted)."
-          ) // ログ追加
+          )
           return
         }
         console.log(`CallScreen: User joined: ${name} (${peerId})`)
@@ -212,7 +211,6 @@ export default function CallScreen() {
         })
       })
 
-      // 他のユーザーが退出したときのイベント
       socket.on('user-left', (payload: UserLeftPayload) => {
         const { peerId } = payload
         if (!isMounted) return
@@ -220,7 +218,6 @@ export default function CallScreen() {
         // removePeer は onPeerDisconnect で呼ばれる
       })
 
-      // 既存の参加者リストを取得するイベント
       socket.on(
         'existing-participants',
         (payload: ExistingParticipantsPayload) => {
@@ -253,7 +250,6 @@ export default function CallScreen() {
         }
       )
 
-      //  接続が確立していて Peer ID も確定したら join-room を emit
       if (socket.connected && peerIdForSocket) {
         console.log(
           `CallScreen: Emitting join-room (from setupWebSocketListeners) with peerId: ${peerIdForSocket}`
@@ -271,8 +267,6 @@ export default function CallScreen() {
           'Peer ID:',
           peerIdForSocket
         )
-        // 接続がまだなら、'connect' イベント内で再度 emit を試みるロジックが必要になる場合がある
-        // (ただし、今回の修正で 'connect' は Peer ID 確定前に発生する可能性が高い)
       }
     }
     // --- ここまで WebSocket イベントリスナー設定 ---
@@ -280,8 +274,6 @@ export default function CallScreen() {
     // --- PeerJS の初期化 ---
     const initialize = async () => {
       try {
-        // ★★★ initPeer を呼び出す (内部での disconnectAll は削除済み) ★★★
-        // initPeer に渡す直前の nameFromStorage をログ出力
         console.log(
           `[CallScreen initialize] Calling initPeer with name: "${nameFromStorage!}"`
         )
@@ -295,10 +287,17 @@ export default function CallScreen() {
                 const audio = new Audio()
                 audio.srcObject = stream
                 audio.dataset.peerId = peerId
-                console.log(
-                  `CallScreen: Appending audio element for ${peerId} to document body`
-                ) // ログ追加
-                document.body.appendChild(audio)
+                // ★★★ audio 要素を特定のコンテナに追加 ★★★
+                const container = document.getElementById('audio-container')
+                if (container) {
+                  container.appendChild(audio)
+                  console.log(
+                    `CallScreen: Appended audio element for ${peerId} to #audio-container`
+                  )
+                } else {
+                  console.warn('#audio-container not found, appending to body.')
+                  document.body.appendChild(audio)
+                }
                 audio
                   .play()
                   .catch((e) => console.error('Audio play failed:', e))
@@ -306,23 +305,22 @@ export default function CallScreen() {
               }
             },
             onPeerOpen: (id) => {
+              // ... 変更なし ...
               if (!isMounted) return
               console.log('CallScreen: Peer opened with ID:', id)
               currentPeerId = id
               setMyPeerId(id)
               myPeerIdRef.current = id
-
               upsertParticipant({
                 id,
                 name: nameFromStorage!,
                 isMuted: isMuted,
                 isSelf: true,
               })
-
-              // ★★★ setupWebSocketListeners を呼ぶ (ここで join-room が emit されるはず) ★★★
               setupWebSocketListeners(id)
             },
             onLocalStream: (stream) => {
+              // ... 変更なし ...
               if (!isMounted) return
               console.log('CallScreen: Local stream obtained.')
               localStreamRef.current = stream
@@ -338,25 +336,34 @@ export default function CallScreen() {
               }
             },
             onReceiveUserName: (peerId, name) => {
+              // ... 変更なし ...
               if (!isMounted) return
-              // ★★★ チェックを削除し、常に upsertParticipant を呼ぶ ★★★
               console.log(
                 `[CallScreen onReceiveUserName] Received name for peer ${peerId}: "${name}"`
               )
               upsertParticipant({ id: peerId, name })
             },
-
             onReceiveMuteStatus: (peerId, isMuted) => {
+              // ... 変更なし ...
               if (!isMounted) return
-              // ★★★ チェックを削除し、常に upsertParticipant を呼ぶ ★★★
               console.log(
                 `[CallScreen onReceiveMuteStatus] Received mute status for peer ${peerId}: ${isMuted}`
               )
               upsertParticipant({ id: peerId, isMuted })
             },
             onPeerDisconnect: (peerId) => {
+              // ... 変更なし ...
               if (!isMounted) return
               removePeer(peerId)
+            },
+            // ★★★ 話者検出コールバックを実装 ★★★
+            onSpeakingStatusChange: (peerId: string, isSpeaking: boolean) => {
+              console.log(
+                `[CallScreen onSpeakingStatusChange] Received: Peer ${peerId}, isSpeaking: ${isSpeaking}`
+              )
+              if (!isMounted) return
+              // console.log(`[CallScreen onSpeakingStatusChange] Peer ${peerId} is ${isSpeaking ? 'speaking' : 'not speaking'}`); // デバッグ用
+              upsertParticipant({ id: peerId, isSpeaking })
             },
           },
           nameFromStorage!,
@@ -376,24 +383,18 @@ export default function CallScreen() {
     // --- ここまで PeerJS の初期化 ---
 
     // --- メイン useEffect のクリーンアップ関数 ---
-    // 主に isMounted フラグのリセットやオーディオ要素のクリーンアップを行う
     return () => {
-      isMounted = false // コールバック内での処理を停止させる
+      isMounted = false
       console.log('CallScreen: Cleaning up (useEffect dependency change)...')
-
-      // PeerManager の切断処理はアンマウント用 useEffect で行う
-      // disconnectAll() // ★★★ ここでは呼び出さない ★★★
-
-      // オーディオ要素を停止・削除
+      // ★★★ オーディオ要素のクリーンアップを改善 ★★★
       Object.values(audioRefs.current).forEach((audio) => {
         audio.pause()
         audio.srcObject = null
+        audio.remove() // 要素自体を削除
       })
       audioRefs.current = {}
-      localStreamRef.current = null // ローカルストリームの参照をクリア
-      myPeerIdRef.current = '' // Peer ID の参照をクリア
-
-      // WebSocket の disconnect もアンマウント用 useEffect で行う
+      localStreamRef.current = null
+      myPeerIdRef.current = ''
     }
     // --- ここまでメイン useEffect のクリーンアップ ---
 
@@ -401,34 +402,28 @@ export default function CallScreen() {
   }, [roomCode, router, removePeer, upsertParticipant]) // 依存配列は変更なし
   // --- ここまでメインの useEffect ---
 
-  // ★★★ コンポーネントアンマウント時に確実に切断するための useEffect ★★★
+  // --- アンマウント用 useEffect (変更なし) ---
   useEffect(() => {
     return () => {
       console.log(
         'CallScreen: Component unmounting, disconnecting socket and PeerJS.'
       )
-      socketRef.current?.disconnect() // WebSocket 接続を切断
-      disconnectAll() // ★★★ PeerJS 接続を切断 ★★★
-      initializedSocket.current = false // 次回マウント時に再接続できるようにフラグをリセット
-      socketRef.current = null // ref もクリア
+      socketRef.current?.disconnect()
+      disconnectAll()
+      initializedSocket.current = false
+      socketRef.current = null
     }
-  }, []) // 空の依存配列で、アンマウント時にのみ実行
-  // ★★★ ここまでアンマウント用 useEffect ★★★
+  }, [])
+  // --- ここまでアンマウント用 useEffect ---
 
-  // --- 退出処理 ---
+  // --- 退出処理 (変更なし) ---
   const leaveRoom = useCallback(() => {
     console.log('CallScreen: Leaving room...')
-    // WebSocket で退出を通知 (サーバー側で処理するなら必要)
-    // const payload: LeaveRoomPayload = { roomCode, peerId: myPeerIdRef.current };
-    // socketRef.current?.emit('leave-room', payload);
-
-    // PeerJS と WebSocket の接続を切断 (アンマウント用 useEffect で行われるが、即時実行)
     disconnectAll()
     socketRef.current?.disconnect()
     initializedSocket.current = false
     socketRef.current = null
-
-    router.push('/') // ホーム画面に戻る
+    router.push('/')
   }, [router])
   // --- ここまで退出処理 ---
 
@@ -441,31 +436,36 @@ export default function CallScreen() {
 
       <h2>参加者リスト</h2>
       <ul className={styles.participantList}>
-        {participants.map((p) => (
-          <li
-            key={p.id}
-            // isSelf に応じてスタイルを適用
-            className={`${styles.participantItem} ${
-              p.isSelf ? styles.selfParticipant : ''
-            }`}
-          >
-            <span className={styles.participantName}>
-              {p.name} {p.isSelf ? '' : ''}
-            </span>
-
-            <span
-              className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+        {participants.map((p) => {
+          console.log(
+            `[CallScreen map] Peer: ${p.id}, isSpeaking: ${p.isSpeaking}`
+          )
+          return (
+            <li
+              key={p.id}
+              // ★★★ isSpeaking クラスを追加 ★★★
+              className={`${styles.participantItem} ${
+                p.isSelf ? styles.selfParticipant : ''
+              } ${
+                p.isSpeaking ? styles.speakingParticipant : '' // isSpeaking 状態に応じてクラスを適用
+              }`}
             >
-              {p.isMuted ? '🔇' : '🎤'}
-            </span>
-            {/* )} */}
-          </li>
-        ))}
+              <span className={styles.participantName}>
+                {p.name} {p.isSelf ? '' : ''} {/* '(あなた)' は削除 */}
+              </span>
+              <span
+                className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+              >
+                {p.isMuted ? '🔇' : '🎤'}
+              </span>
+            </li>
+          )
+        })}
       </ul>
       <button
         onClick={toggleMic}
         className={styles.button}
-        disabled={!localStreamRef.current} // ローカルストリームが取得できたら有効化
+        disabled={!localStreamRef.current}
       >
         {isMuted ? '🔇 ミュート中' : '🎤 ミュート解除'}
       </button>
@@ -473,6 +473,9 @@ export default function CallScreen() {
       <button onClick={leaveRoom} className={styles.button}>
         退出
       </button>
+
+      {/* ★★★ オーディオ要素を追加するためのコンテナ ★★★ */}
+      <div id='audio-container' style={{ display: 'none' }}></div>
     </div>
   )
   // --- ここまで JSX レンダリング ---
