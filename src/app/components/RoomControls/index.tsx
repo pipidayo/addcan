@@ -14,7 +14,7 @@ type Props = {
 }
 
 export default function RoomControls({ name, router }: Props) {
-  const [roomCode, setRoomCode] = useState('')
+  const [roomCodeInput, setRoomCodeInput] = useState('')
   const [isCheckingRoom, setIsCheckingRoom] = useState(false) // 確認中フラグを追加
   // 部屋を作成する処理
   const handleCreateRoom = () => {
@@ -39,11 +39,14 @@ export default function RoomControls({ name, router }: Props) {
       alert('名前を入力してください。')
       return
     }
-    const codeToJoin = roomCode.trim()
-    if (!codeToJoin) {
+    const shortCode = roomCodeInput.trim()
+    if (!shortCode) {
       alert('ルームコードを入力してください。')
       return
     }
+
+    // 内部処理用に "room-" プレフィックスを付与
+    const fullRoomCode = `room-${shortCode}`
 
     // 確認中フラグを立てる (ボタンを無効化するため)
     setIsCheckingRoom(true)
@@ -80,7 +83,7 @@ export default function RoomControls({ name, router }: Props) {
         (resolve, reject) => {
           socket!.emit(
             'check-room-exists',
-            { roomCode: codeToJoin },
+            { roomCode: fullRoomCode },
             (response: { exists: boolean } | null) => {
               // コールバックが想定通り呼ばれたかチェック
               if (response && typeof response.exists === 'boolean') {
@@ -103,7 +106,7 @@ export default function RoomControls({ name, router }: Props) {
       )
 
       console.log(
-        `[RoomControls] Room ${codeToJoin} exists check result:`,
+        `[RoomControls] Room ${fullRoomCode} exists check result:`,
         result.exists
       )
 
@@ -111,11 +114,11 @@ export default function RoomControls({ name, router }: Props) {
         // 部屋が存在する場合のみ localStorage に保存して画面遷移
         localStorage.setItem('my_name', name)
         console.log(`Saved name to localStorage: ${name}`)
-        router.push(`/room/${codeToJoin}`)
+        router.push(`/room/${fullRoomCode}`)
         // 遷移成功時は setIsCheckingRoom(false) は不要 (画面が変わるため)
       } else {
         // 部屋が存在しない場合
-        alert(`部屋コード "${codeToJoin}" は存在しません。`)
+        alert(`部屋コード "${shortCode}" は存在しません。`)
         setIsCheckingRoom(false) // 確認完了、ボタンを有効化
       }
     } catch (error: unknown) {
@@ -126,7 +129,7 @@ export default function RoomControls({ name, router }: Props) {
       if (error instanceof Error) {
         errorMessage = error.message
       }
-      alert(`ルームが存在しません: ${errorMessage}`)
+      alert(`部屋コード "${shortCode}" の確認に失敗しました: ${errorMessage}`)
       setIsCheckingRoom(false)
     } finally {
       // 確認が終わったら必ず切断
@@ -151,13 +154,13 @@ export default function RoomControls({ name, router }: Props) {
         type='text'
         className={styles.input}
         placeholder='コードを入力'
-        value={roomCode}
-        onChange={(e) => setRoomCode(e.target.value)}
+        value={roomCodeInput}
+        onChange={(e) => setRoomCodeInput(e.target.value)}
         disabled={isCheckingRoom} // 確認中は無効化
       />
       <button
         onClick={handleJoinRoom}
-        disabled={isCheckingRoom || !roomCode.trim() || !name.trim()} // 確認中や未入力時も無効化
+        disabled={isCheckingRoom || !roomCodeInput.trim() || !name.trim()} // 確認中や未入力時も無効化
         className={styles.button}
       >
         {isCheckingRoom ? '確認中...' : '部屋に入る'} {/* ボタン表示切替 */}

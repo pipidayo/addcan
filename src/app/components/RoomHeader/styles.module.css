@@ -1,18 +1,117 @@
+/* src/app/components/RoomHeader/styles.module.css */
+
 .header {
   display: flex;
-  justify-content: space-between;
+  justify-content: space-between; /* 要素を両端に配置 */
   align-items: center;
-  padding: 10px;
-  background-color: #282c34;
-  color: white;
+  padding: 12px 24px; /* パディング調整 */
+  background-color: rgba(var(--accent-color-primary-rgb), 0.1); /* 薄い紫背景 */
+  border-bottom: 1px solid rgba(var(--accent-color-primary-rgb), 0.2); /* 下線 */
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text-color-on-dark-bg); /* 白文字 */
 }
 
-.exitButton {
-  padding: 5px 10px;
-  font-size: 14px;
-  background-color: red;
-  color: white;
-  border: none;
-  border-radius: 5px;
+.roomInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* ラベルとコード間のスペース */
+}
+
+.roomLabel {
+  font-size: 0.9rem;
+  color: var(--text-color-muted); /* やや薄い色 */
+}
+
+.codeContainer {
+  display: flex;
+  align-items: center;
+  background-color: rgba(
+    var(--input-bg-rgba),
+    0.5
+  ); /* 入力欄背景より少し濃く */
+  padding: 6px 12px;
+  border-radius: var(--border-radius);
+  border: 1px solid rgba(var(--input-border-color-rgba));
+}
+
+.roomCodeValue {
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 1px; /* 文字間隔を少し広げる */
+  margin-right: 10px; /* コピーボタンとの間隔 */
+  font-family: var(--font-geist-mono); /* 等幅フォントで見やすく */
+}
+
+.copyButton {
+  background-color: rgba(var(--button-bg-rgba), 0.7); /* ボタン色を少し薄めに */
+  color: var(--button-text-color);
+  border: 1px solid rgba(var(--button-border-color-rgba), 0.5);
+  padding: 4px 10px; /* 小さめのパディング */
+  border-radius: 8px; /* 少し小さめの角丸 */
+  font-size: 0.8rem; /* 小さめのフォント */
+  font-weight: 500;
   cursor: pointer;
+  transition: all var(--transition-duration) ease;
+  white-space: nowrap; /* テキストが折り返さないように */
+}
+
+.copyButton:hover:not(:disabled) {
+  background-color: rgba(var(--button-bg-hover-rgba), 0.8);
+  border-color: rgba(var(--button-border-color-hover-rgba), 0.6);
+  transform: translateY(-1px);
+}
+
+.copyButton:active:not(:disabled) {
+  background-color: rgba(var(--button-bg-active-rgba), 0.9);
+  transform: translateY(0);
+}
+
+.copyButton:disabled {
+  background-color: rgba(
+    var(--accent-color-speaking-rgb),
+    0.6
+  ); /* コピー完了時は緑系に */
+  border-color: rgba(var(--accent-color-speaking-rgb), 0.4);
+  color: var(--text-color-on-dark-bg);
+  cursor: default;
+  opacity: 0.9;
+}
+
+/* 任意: アイコンを使う場合のスタイル */
+/* .copyIcon {
+  width: 16px;
+  height: 16px;
+} */
+
+.exitButton {
+  /* CallScreen のボタンと同じスタイルを基本にする */
+  background-color: rgba(var(--button-bg-rgba));
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  color: var(--button-text-color);
+  border: 1px solid rgba(var(--button-border-color-rgba));
+  padding: 10px 18px; /* 少し小さめ */
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  font-size: 0.9rem; /* 少し小さめ */
+  font-weight: 600;
+  transition: all var(--transition-duration) ease;
+  box-shadow: var(--shadow);
+}
+
+.exitButton:hover:not(:disabled) {
+  background-color: rgba(var(--button-bg-hover-rgba));
+  border-color: rgba(var(--button-border-color-hover-rgba));
+  box-shadow:
+    0 7px 10px -3px rgba(0, 0, 0, 0.06),
+    0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+.exitButton:active:not(:disabled) {
+  background-color: rgba(var(--button-bg-active-rgba));
+  border-color: rgba(var(--button-border-color-rgba));
+  transform: translateY(0px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
