@@ -8,8 +8,12 @@ import {
   disconnectAll,
   sendMuteStatus,
   switchMicrophone,
-} from '../PeerManager' // PeerManager のインポートは変更なし
+  startScreenShare,
+  stopScreenShare,
+} from '../PeerManager'
 import io, { Socket } from 'socket.io-client'
+// ★ 任意: アイコンを使う場合
+// import { ComputerDesktopIcon, StopCircleIcon } from '@heroicons/react/24/outline';
 
 // WebSocket サーバーの URL
 const WEBSOCKET_SERVER_URL =
@@ -84,6 +88,11 @@ export default function CallScreen() {
   }>({})
   //  しきい値 (PeerManager と同じか、調整)
   const localSpeakingThreshold = 10
+
+  const [isScreenSharing, setIsScreenSharing] = useState(false) // 自分が共有中か
+  const [screenSharingPeerId, setScreenSharingPeerId] = useState<string | null>(
+    null
+  ) // 誰が共有中か
 
   // --- ここまで State と Ref 定義 ---
 
@@ -295,6 +304,8 @@ export default function CallScreen() {
       delete audioRefs.current[peerId]
       console.log(`CallScreen: Removed audio for peer: ${peerId}`)
     }
+    // ★ 退出者が共有中ならリセット
+    setScreenSharingPeerId((prev) => (prev === peerId ? null : prev))
   }, [])
 
   // ★★★ ローカル音声分析を開始する関数 ★★★
@@ -399,6 +410,56 @@ export default function CallScreen() {
       upsertParticipant({ id: myPeerIdRef.current, isSpeaking: false })
     }
   }, [upsertParticipant])
+
+  // ★★★ 画面共有切り替えハンドラ (乗っ取り方式) ★★★
+  const toggleScreenShare = useCallback(async () => {
+    if (isScreenSharing) {
+      // --- 停止処理 ---
+      try {
+        await stopScreenShare()
+        setIsScreenSharing(false)
+        setScreenSharingPeerId(null) // 自分が停止したのでクリア
+        console.log('CallScreen: Screen sharing stopped.')
+      } catch (error) {
+        console.error('CallScreen: Failed to stop screen share:', error)
+        alert(
+          `画面共有の停止に失敗しました: ${error instanceof Error ? error.message : String(error)}`
+        )
+        setIsScreenSharing(false) // UI 状態は停止に合わせる
+        setScreenSharingPeerId(null) // 共有者もクリア
+      }
+    } else {
+      // --- 開始処理 (他の人が共有中でも開始する) ---
+      try {
+        // (任意) 他の人が共有中ならコンソールにログ
+        if (
+          screenSharingPeerId &&
+          screenSharingPeerId !== myPeerIdRef.current
+        ) {
+          const sharerName =
+            participants.find((p) => p.id === screenSharingPeerId)?.name ||
+            '他の参加者'
+          console.log(`Starting screen share, taking over from ${sharerName}`)
+        }
+
+        await startScreenShare() // PeerManager の開始処理
+        setIsScreenSharing(true) // 自分の共有状態を true に
+        setScreenSharingPeerId(myPeerIdRef.current) // 共有者を自分に設定
+        console.log('CallScreen: Screen sharing started.')
+      } catch (error) {
+        console.error('CallScreen: Failed to start screen share:', error)
+        if (error instanceof Error && error.name !== 'NotAllowedError') {
+          // ユーザーキャンセル以外
+          alert(`画面共有の開始に失敗しました: ${error.message}`)
+        }
+        setIsScreenSharing(false) // 開始失敗
+        // 失敗した場合、共有者が自分になっていたらリセット
+        setScreenSharingPeerId((prev) =>
+          prev === myPeerIdRef.current ? null : prev
+        )
+      }
+    }
+  }, [isScreenSharing, screenSharingPeerId, participants]) // ★ 依存配列に screenSharingPeerId, participants を追加
 
   // --- ここまで useCallback フック ---
 
@@ -601,16 +662,17 @@ export default function CallScreen() {
               // ... 変更なし ...
               if (!isMounted) return
               console.log('CallScreen: Local stream obtained.')
+
               localStreamRef.current = stream
               const audioTrack = stream.getAudioTracks()[0]
               if (audioTrack) {
                 const initialMuteState = isMuted
                 audioTrack.enabled = !initialMuteState
-                setParticipants((prev) =>
-                  prev.map((p) =>
-                    p.isSelf ? { ...p, isMuted: initialMuteState } : p
-                  )
-                )
+                // setParticipants((prev) =>
+                //   prev.map((p) =>
+                //     p.isSelf ? { ...p, isMuted: initialMuteState } : p
+                //   )
+                // )
                 // ★★★ ローカルストリーム取得後に分析を開始 ★★★
                 startLocalAudioAnalysis(stream)
               }
@@ -636,6 +698,7 @@ export default function CallScreen() {
               if (!isMounted) return
               removePeer(peerId)
             },
+
             // ★★★ 話者検出コールバックを実装 ★★★
             onSpeakingStatusChange: (peerId: string, isSpeaking: boolean) => {
               console.log(
@@ -644,6 +707,48 @@ export default function CallScreen() {
               if (!isMounted) return
               // console.log(`[CallScreen onSpeakingStatusChange] Peer ${peerId} is ${isSpeaking ? 'speaking' : 'not speaking'}`); // デバッグ用
               upsertParticipant({ id: peerId, isSpeaking })
+            },
+
+            // ★★★ 画面共有状態受信コールバック (乗っ取り方式のロジック) ★★★
+            onReceiveScreenShareStatus: (
+              peerId: string,
+              isSharing: boolean
+            ) => {
+              if (!isMounted) return
+              console.log(
+                `[CallScreen] Received screen share status from ${peerId}: ${isSharing}`
+              )
+
+              if (isSharing) {
+                // --- 他の誰かが共有を開始した場合 ---
+                // 現在の共有者IDを取得 (setScreenSharingPeerId は非同期なので現在の state を使う)
+                const currentSharer = screenSharingPeerId // ★ state を直接参照
+
+                // 新しい共有者が現在の共有者と違う場合
+                if (currentSharer !== peerId) {
+                  // もし自分が共有中だったら、ローカルで停止する
+                  if (currentSharer === myPeerIdRef.current) {
+                    console.warn(
+                      `Peer ${peerId} started sharing, stopping local screen share.`
+                    )
+                    stopScreenShare().catch((err) =>
+                      console.error(
+                        'Error stopping local share on conflict:',
+                        err
+                      )
+                    )
+                    setIsScreenSharing(false) // 自分の共有状態も false に
+                  }
+                }
+                // 共有者IDを新しい共有者に更新
+                setScreenSharingPeerId(peerId)
+              } else {
+                // --- 誰かが共有を停止した場合 ---
+                // 停止したのが現在の共有者であればリセット
+                setScreenSharingPeerId((prev) =>
+                  prev === peerId ? null : prev
+                )
+              }
             },
           },
           nameFromStorage!,
@@ -670,6 +775,15 @@ export default function CallScreen() {
       console.log('CallScreen: Cleaning up (useEffect dependency change)...')
       // ★★★ ローカル分析も停止 ★★★
       stopLocalAudioAnalysis()
+
+      // ★★★ 画面共有停止処理を追加 ★★★
+      if (isScreenSharing) {
+        // isScreenSharing は state なので直接参照できる
+        stopScreenShare().catch((err) =>
+          console.error('Cleanup: Error stopping screen share', err)
+        )
+      }
+
       // ★★★ オーディオ要素のクリーンアップを改善 ★★★
       Object.values(audioRefs.current).forEach((audio) => {
         audio.pause()
@@ -693,6 +807,9 @@ export default function CallScreen() {
         'CallScreen: Component unmounting, disconnecting socket and PeerJS.'
       )
       stopLocalAudioAnalysis()
+      stopScreenShare().catch((err) =>
+        console.error('Unmount: Error stopping screen share', err)
+      )
       socketRef.current?.disconnect()
       disconnectAll()
       initializedSocket.current = false
@@ -704,6 +821,9 @@ export default function CallScreen() {
   // --- 退出処理 (変更なし) ---
   const leaveRoom = useCallback(() => {
     console.log('CallScreen: Leaving room...')
+    stopScreenShare().catch((err) =>
+      console.error('LeaveRoom: Error stopping screen share', err)
+    )
     disconnectAll()
     socketRef.current?.disconnect()
     initializedSocket.current = false
@@ -767,7 +887,14 @@ export default function CallScreen() {
           </select>
         </div>
       </div>
-
+      {/* ★★★ 共有中インジケーター (任意) ★★★ */}
+      {screenSharingPeerId && (
+        <div className={styles.sharingIndicator}>
+          {screenSharingPeerId === myPeerIdRef.current
+            ? 'あなたが画面共有中です'
+            : `${participants.find((p) => p.id === screenSharingPeerId)?.name || '参加者'}が画面共有中です`}
+        </div>
+      )}
       <h2>参加者リスト</h2>
       <ul className={styles.participantList}>
         {participants.map((p) => {
@@ -829,6 +956,16 @@ export default function CallScreen() {
         disabled={!localStreamRef.current}
       >
         {isMuted ? '🔇 ミュート中' : '🎤 ミュート解除'}
+      </button>
+      {/* ★★★ 画面共有ボタン (disabled 属性なし) ★★★ */}
+      <button
+        onClick={toggleScreenShare}
+        className={`${styles.button} ${isScreenSharing ? styles.stopButton : ''}`}
+        // disabled 属性は削除
+      >
+        {/* ★ 任意: アイコン */}
+        {/* {isScreenSharing ? <StopCircleIcon width={20} height={20}/> : <ComputerDesktopIcon width={20} height={20}/>} */}
+        {isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
       </button>
 
       <button onClick={leaveRoom} className={styles.button}>
