@@ -2,20 +2,10 @@
 'use client'
 import styles from './styles.module.css'
 import { useParams, useRouter } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback } from 'react'
-import {
-  initPeer,
-  callPeer,
-  disconnectAll,
-  sendMuteStatus,
-  switchMicrophone,
-  startScreenShare,
-  stopScreenShare,
-  type InitPeerOptions, // ★ 型をインポート
-} from '../PeerManager'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react' // Dispatch, SetStateAction をインポート
 import io, { Socket } from 'socket.io-client'
-// ★★★ フッターコンポーネントをインポート ★★★
 import CallControlsFooter from '../CallControlsFooter' // パスを確認してください
+import { usePeerConnection } from '@/app/hooks/usePeerConnection'
 // ★ 任意: アイコンを使う場合
 // import { ComputerDesktopIcon, StopCircleIcon } from '@heroicons/react/24/outline';
 
@@ -24,7 +14,7 @@ const WEBSOCKET_SERVER_URL =
   process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 'http://localhost:3001'
 
 // --- インターフェース定義 ---
-interface Participant {
+export interface Participant {
   id: string
   name: string
   isMuted: boolean
@@ -55,6 +45,7 @@ interface LocalAudioAnalysisRefs {
   dataArray: Uint8Array | null
   isSpeaking: boolean // 最後に検出された状態
 }
+
 // --- ここまでインターフェース定義 ---
 
 export default function CallScreen() {
@@ -66,13 +57,13 @@ export default function CallScreen() {
 
   // --- State と Ref 定義 ---
   const socketRef = useRef<Socket | null>(null)
-  const [myPeerId, setMyPeerId] = useState('')
-  const [myName, setMyName] = useState('')
+  const [socketInstance, setSocketInstance] = useState<Socket | null>(null) // ★ Socket state
+  const [myName] = useState(() => localStorage.getItem('my_name') || '')
   const [participants, setParticipants] = useState<Participant[]>([])
   const audioRefs = useRef<{ [id: string]: HTMLAudioElement }>({})
   const [isMuted, setIsMuted] = useState(false)
   const localStreamRef = useRef<MediaStream | null>(null)
-  const myPeerIdRef = useRef<string>('')
+  const myPeerIdRef = useRef<string>('') // Peer ID を Ref で保持
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
   const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([])
   const [selectedMicId, setSelectedMicId] = useState<string>('')
@@ -88,18 +79,74 @@ export default function CallScreen() {
   const [participantVolumes, setParticipantVolumes] = useState<{
     [id: string]: number
   }>({})
+  const participantVolumesRef = useRef(participantVolumes)
+  useEffect(() => {
+    participantVolumesRef.current = participantVolumes
+  }, [participantVolumes]) // participantVolumes が更新されたら Ref も更新
+
   const localSpeakingThreshold = 10
 
   const [isScreenSharing, setIsScreenSharing] = useState(false) // 自分が共有中か
   const [screenSharingPeerId, setScreenSharingPeerId] = useState<string | null>(
     null
   )
-  // ★★★ 画面共有表示用の State と Ref を追加 ★★★
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const [screenShareStream, setScreenShareStream] =
     useState<MediaStream | null>(null)
 
   // --- ここまで State と Ref 定義 ---
+
+  // --- コールバック関数 (usePeerConnection に渡すもの) ---
+  const handleReceiveAudioStream = useCallback(
+    (stream: MediaStream, peerId: string) => {
+      console.log(`CallScreen: Received audio stream from ${peerId}`)
+      if (!audioRefs.current[peerId]) {
+        const audio = new Audio()
+        audio.srcObject = stream
+        audio.dataset.peerId = peerId
+        const container = document.getElementById('audio-container')
+        if (container) container.appendChild(audio)
+        else document.body.appendChild(audio)
+        audio.play().catch((e) => console.error('Audio play failed:', e))
+        audioRefs.current[peerId] = audio
+
+        // ★ Ref を使って最新の音量を取得
+        const initialVolume = participantVolumesRef.current[peerId] ?? 1.0
+        // handleVolumeChange は state を更新する関数なので依存配列に不要
+        handleVolumeChange(peerId, initialVolume) // handleVolumeChange は useCallback 不要
+
+        if (selectedSpeakerId && typeof audio.setSinkId === 'function') {
+          audio
+            .setSinkId(selectedSpeakerId)
+            .catch((err) =>
+              console.error('Failed to set sinkId on new audio:', err)
+            )
+        }
+      }
+    },
+    // ★ participantVolumes を依存配列から削除
+    [selectedSpeakerId]
+    // handleVolumeChange は useCallback でラップ不要 (useState の set 関数は安定)
+  )
+
+  const handleReceiveScreenStream = useCallback(
+    (stream: MediaStream, peerId: string) => {
+      console.log(`CallScreen: Received screen share stream from ${peerId}`)
+      setScreenShareStream(stream)
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream
+        screenVideoRef.current
+          .play()
+          .catch((e) => console.error('Screen share video play failed:', e))
+        console.log(
+          `CallScreen: Set screen share stream to video element for ${peerId}`
+        )
+      } else {
+        console.warn('Screen share video element ref not found.')
+      }
+    },
+    []
+  )
 
   // 音量変更ハンドラ
   const handleVolumeChange = (peerId: string, volume: number) => {
@@ -113,6 +160,7 @@ export default function CallScreen() {
   // デバイスリスト取得関数
   const getDevices = useCallback(async () => {
     try {
+      // ダミーストリームを取得してすぐに停止することで、デバイスへのアクセス許可をトリガー
       const dummyStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
       })
@@ -127,6 +175,7 @@ export default function CallScreen() {
       setMicrophones(audioInputDevices)
       setSpeakers(audioOutputDevices)
 
+      // 現在選択中のマイクがリストに存在するか確認し、なければデフォルトを設定
       const currentMic = localStreamRef.current
         ?.getAudioTracks()[0]
         ?.getSettings().deviceId
@@ -139,6 +188,7 @@ export default function CallScreen() {
         setSelectedMicId(audioInputDevices[0].deviceId)
       }
 
+      // デフォルトスピーカーを設定
       const defaultSpeaker = audioOutputDevices.find(
         (d) => d.deviceId === 'default'
       )
@@ -151,8 +201,9 @@ export default function CallScreen() {
       console.log('Available speakers:', audioOutputDevices)
     } catch (err) {
       console.error('Error enumerating devices:', err)
+      // エラー処理 (例: ユーザーに通知)
     }
-  }, [])
+  }, []) // 依存配列は空
 
   // stopLocalAudioAnalysis
   const stopLocalAudioAnalysis = useCallback(() => {
@@ -180,6 +231,7 @@ export default function CallScreen() {
       isSpeaking: false,
     }
     console.log('CallScreen: Stopped local audio analysis.')
+    // 自分の発言状態をリセット
     if (myPeerIdRef.current) {
       setParticipants((prev) =>
         prev.map((p) =>
@@ -196,20 +248,22 @@ export default function CallScreen() {
         const existingIndex = prev.findIndex((p) => p.id === participantData.id)
         let newState
         if (existingIndex > -1) {
+          // 既存参加者の情報を更新
           const updatedParticipants = [...prev]
           const existingParticipant = updatedParticipants[existingIndex]
           updatedParticipants[existingIndex] = {
             ...existingParticipant,
             ...participantData,
-            isSelf: existingParticipant.isSelf,
+            isSelf: existingParticipant.isSelf, // isSelf は上書きしない
           }
           newState = updatedParticipants
         } else {
+          // 新規参加者を追加
           const newParticipant: Participant = {
             id: participantData.id,
             name: participantData.name || 'Unknown',
             isMuted: participantData.isMuted ?? false,
-            isSelf: participantData.isSelf ?? false,
+            isSelf: participantData.isSelf ?? false, // isSelf は usePeerConnection で設定される
             isSpeaking: participantData.isSpeaking ?? false,
           }
           newState = [...prev, newParticipant]
@@ -217,13 +271,13 @@ export default function CallScreen() {
         return newState
       })
     },
-    []
+    [] // 依存配列は空
   )
 
   // startLocalAudioAnalysis
   const startLocalAudioAnalysis = useCallback(
     (stream: MediaStream) => {
-      stopLocalAudioAnalysis()
+      stopLocalAudioAnalysis() // 既存の分析を停止
 
       const audioTracks = stream.getAudioTracks()
       if (audioTracks.length === 0 || !audioTracks[0].enabled) {
@@ -237,10 +291,10 @@ export default function CallScreen() {
         const context = new AudioContext()
         const source = context.createMediaStreamSource(stream)
         const analyser = context.createAnalyser()
-        analyser.fftSize = 256
-        analyser.smoothingTimeConstant = 0.3
+        analyser.fftSize = 256 // FFTサイズ (周波数解像度)
+        analyser.smoothingTimeConstant = 0.3 // 平滑化定数 (0-1)
         source.connect(analyser)
-        const dataArray = new Uint8Array(analyser.frequencyBinCount)
+        const dataArray = new Uint8Array(analyser.frequencyBinCount) // 周波数データ用配列
 
         localAudioAnalysis.current = {
           context,
@@ -253,10 +307,11 @@ export default function CallScreen() {
 
         const analyse = () => {
           const analysis = localAudioAnalysis.current
+          // コンテキストやアナライザーが破棄されていないか確認
           if (
             !analysis.analyser ||
             !analysis.dataArray ||
-            !analysis.context || // ← context が null でないか確認
+            !analysis.context ||
             analysis.context.state !== 'running'
           ) {
             if (analysis.animationFrameId)
@@ -265,19 +320,24 @@ export default function CallScreen() {
             return
           }
 
+          // 次のフレームで再度 analyse を実行
           analysis.animationFrameId = requestAnimationFrame(analyse)
+          // 周波数データを取得
           analysis.analyser.getByteFrequencyData(analysis.dataArray)
 
+          // 平均音量を計算 (簡易的な発話検出)
           let sum = 0
           for (let i = 0; i < analysis.dataArray.length; i++) {
             sum += analysis.dataArray[i]
           }
           const average = sum / analysis.dataArray.length
-          const isSpeaking = average > localSpeakingThreshold
+          const isSpeaking = average > localSpeakingThreshold // 閾値と比較
 
+          // 発話状態が変化した場合のみ更新
           if (isSpeaking !== analysis.isSpeaking) {
             analysis.isSpeaking = isSpeaking
             if (myPeerIdRef.current) {
+              // 自分の Participant オブジェクトの発話状態を更新
               setParticipants((prev) =>
                 prev.map((p) =>
                   p.id === myPeerIdRef.current ? { ...p, isSpeaking } : p
@@ -286,45 +346,14 @@ export default function CallScreen() {
             }
           }
         }
-        analyse()
+        analyse() // 分析開始
         console.log('CallScreen: Started local audio analysis.')
       } catch (error) {
         console.error('CallScreen: Error starting local audio analysis:', error)
-        stopLocalAudioAnalysis()
+        stopLocalAudioAnalysis() // エラー時は分析を停止
       }
     },
-    [localSpeakingThreshold, stopLocalAudioAnalysis]
-  )
-
-  // handleMicChange
-  const handleMicChange = useCallback(
-    async (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const newMicId = event.target.value
-      const currentMicId = selectedMicId
-      console.log('Selected Microphone ID:', newMicId)
-      setSelectedMicId(newMicId)
-
-      try {
-        stopLocalAudioAnalysis()
-        await switchMicrophone(newMicId)
-        console.log('Microphone switched successfully in PeerManager')
-        setTimeout(() => {
-          if (localStreamRef.current) {
-            startLocalAudioAnalysis(localStreamRef.current)
-          }
-        }, 500)
-      } catch (error) {
-        console.error('Failed to switch microphone:', error)
-        alert(
-          `マイクの切り替えに失敗しました: ${error instanceof Error ? error.message : String(error)}`
-        )
-        setSelectedMicId(currentMicId)
-        if (localStreamRef.current) {
-          startLocalAudioAnalysis(localStreamRef.current)
-        }
-      }
-    },
-    [selectedMicId, startLocalAudioAnalysis, stopLocalAudioAnalysis]
+    [localSpeakingThreshold, stopLocalAudioAnalysis] // 依存配列
   )
 
   // handleSpeakerChange
@@ -334,6 +363,7 @@ export default function CallScreen() {
       console.log('Selected Speaker ID:', newSpeakerId)
       setSelectedSpeakerId(newSpeakerId)
 
+      // すべてのオーディオ要素の出力デバイスを変更
       Object.values(audioRefs.current).forEach(async (audioElement) => {
         if (audioElement && typeof audioElement.setSinkId === 'function') {
           try {
@@ -345,31 +375,16 @@ export default function CallScreen() {
         }
       })
     },
-    []
+    [] // 依存配列は空
   )
-
-  // toggleMic
-  const toggleMic = useCallback(() => {
-    if (!localStreamRef.current) return
-    const audioTrack = localStreamRef.current.getAudioTracks()[0]
-    if (audioTrack) {
-      const newEnabledState = !audioTrack.enabled
-      audioTrack.enabled = newEnabledState
-      const newMuteState = !newEnabledState
-      setIsMuted(newMuteState)
-      setParticipants((prev) =>
-        prev.map((p) => (p.isSelf ? { ...p, isMuted: newMuteState } : p))
-      )
-      sendMuteStatus(newMuteState)
-      console.log('Mute status sent via PeerManager:', newMuteState)
-    }
-  }, [])
 
   // removePeer
   const removePeer = useCallback(
     (peerId: string) => {
       console.log(`CallScreen: Removing peer: ${peerId}`)
+      // 参加者リストから削除
       setParticipants((prev) => prev.filter((p) => p.id !== peerId))
+      // オーディオ要素を削除
       if (audioRefs.current[peerId]) {
         const audio = audioRefs.current[peerId]
         audio.pause()
@@ -378,14 +393,9 @@ export default function CallScreen() {
         delete audioRefs.current[peerId]
         console.log(`CallScreen: Removed audio for peer: ${peerId}`)
       }
+      // もし切断した人が画面共有中だったらクリア
       setScreenSharingPeerId((prevSharerId) => {
         if (prevSharerId === peerId) {
-          console.log(
-            `CallScreen: Screen sharer ${peerId} disconnected, clearing stream.`
-          )
-          if (screenShareStream) {
-            screenShareStream.getTracks().forEach((track) => track.stop())
-          }
           setScreenShareStream(null)
           if (screenVideoRef.current) {
             screenVideoRef.current.srcObject = null
@@ -395,25 +405,181 @@ export default function CallScreen() {
         return prevSharerId
       })
     },
-    [screenShareStream]
+    [] // 依存配列は空
+  )
+
+  // leaveRoom
+  const leaveRoom = useCallback(() => {
+    console.log('CallScreen: Leaving room...')
+    router.push('/') // ホーム画面などに戻る
+  }, [router])
+
+  // --- usePeerConnection フックの呼び出し ---
+  // ★ peerCallbacks の useMemo の依存配列も更新
+  const peerCallbacks = useMemo(
+    () => ({
+      onReceiveAudioStream: handleReceiveAudioStream, // ★ 更新された関数を参照
+      onReceiveScreenStream: handleReceiveScreenStream,
+      onParticipantUpdate: upsertParticipant,
+      onParticipantRemove: removePeer,
+      onScreenShareStatusChange: (
+        ...args: Parameters<typeof handleScreenShareStatusChange>
+      ) => handleScreenShareStatusChange(...args),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      handleReceiveAudioStream, // ★ 更新された関数を依存配列に追加
+      handleReceiveScreenStream,
+      upsertParticipant,
+      removePeer,
+    ]
+  )
+
+  const {
+    myPeerId: myPeerIdFromHook,
+    localStream,
+    callPeer: callPeerHook,
+    sendMuteStatus: sendMuteStatusHook,
+    switchMicrophone: switchMicrophoneHook,
+    startScreenShare: startScreenShareHook,
+    stopScreenShare: stopScreenShareHook,
+  } = usePeerConnection({
+    roomCode,
+    myName,
+    isMuted,
+    socket: socketInstance, // ★ socketInstance state を渡す
+    ...peerCallbacks,
+  })
+
+  // --- フックの結果を使用するコールバック関数 ---
+  // handleMicChange
+  const handleMicChange = useCallback(
+    async (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const newMicId = event.target.value
+      const currentMicId = selectedMicId
+      console.log('Selected Microphone ID:', newMicId)
+      setSelectedMicId(newMicId)
+
+      try {
+        stopLocalAudioAnalysis() // マイク切り替え前に分析停止
+        await switchMicrophoneHook(newMicId) // フックの関数を呼び出す
+        console.log('Microphone switched successfully via hook')
+        // 分析再開は localStream の useEffect で行う
+      } catch (error) {
+        console.error('Failed to switch microphone:', error)
+        alert(
+          `マイクの切り替えに失敗しました: ${error instanceof Error ? error.message : String(error)}`
+        )
+        setSelectedMicId(currentMicId) // エラー時は選択を元に戻す
+        // エラー時も分析再開は localStream の useEffect で行う
+      }
+    },
+    [
+      selectedMicId,
+      stopLocalAudioAnalysis,
+      switchMicrophoneHook, // フックから取得した関数
+    ]
+  )
+
+  // toggleMic
+  const toggleMic = useCallback(() => {
+    if (!localStream) return
+    const audioTrack = localStream.getAudioTracks()[0]
+    if (audioTrack) {
+      const newEnabledState = !audioTrack.enabled
+      audioTrack.enabled = newEnabledState // トラックの有効/無効を切り替え
+      const newMuteState = !newEnabledState // isMuted state を更新
+      setIsMuted(newMuteState)
+      // 自分の参加者情報を更新
+      setParticipants((prev) =>
+        prev.map((p) => (p.isSelf ? { ...p, isMuted: newMuteState } : p))
+      )
+      sendMuteStatusHook(newMuteState) // 他のピアに状態を送信
+      console.log('Mute status sent via hook:', newMuteState)
+    }
+  }, [localStream, sendMuteStatusHook]) // 依存配列
+
+  // handleScreenShareStatusChange
+  const handleScreenShareStatusChange = useCallback(
+    (peerId: string, isSharing: boolean) => {
+      console.log(
+        `[CallScreen] Handling screen share status from ${peerId}: ${isSharing}`
+      )
+      if (isSharing) {
+        setScreenSharingPeerId((prevSharerId) => {
+          if (prevSharerId !== peerId) {
+            // 自分が共有中だったら停止
+            if (prevSharerId === myPeerIdRef.current) {
+              console.warn(
+                `Peer ${peerId} started sharing, stopping local screen share.`
+              )
+              stopScreenShareHook().catch((err) =>
+                console.error('Error stopping local share on conflict:', err)
+              )
+              setIsScreenSharing(false)
+            }
+            // 既存の共有ストリームがあればクリア
+            setScreenShareStream((prevStream) => {
+              if (prevStream) {
+                console.log(
+                  'Clearing previous screen share stream as sharer changed.'
+                )
+                prevStream.getTracks().forEach((track) => track.stop())
+                if (screenVideoRef.current) {
+                  screenVideoRef.current.srcObject = null
+                }
+              }
+              return null // 新しいストリームは onReceiveScreenStream で設定される
+            })
+          }
+          return peerId // 新しい共有者のIDを設定
+        })
+      } else {
+        // 共有が停止された場合
+        setScreenSharingPeerId((prevSharerId) => {
+          if (prevSharerId === peerId) {
+            console.log(
+              `CallScreen: Peer ${peerId} stopped screen sharing, clearing stream.`
+            )
+            // ストリームをクリア
+            setScreenShareStream((prevStream) => {
+              if (prevStream) {
+                prevStream.getTracks().forEach((track) => track.stop())
+              }
+              if (screenVideoRef.current) {
+                screenVideoRef.current.srcObject = null
+              }
+              return null
+            })
+            return null // 共有者を null に設定
+          }
+          return prevSharerId // 変更なし
+        })
+      }
+    },
+    [stopScreenShareHook] // stopScreenShareHook に依存
   )
 
   // toggleScreenShare
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
+      // 共有中の場合: 停止
       try {
-        await stopScreenShare()
+        await stopScreenShareHook()
         setIsScreenSharing(false)
-        console.log('CallScreen: Screen sharing stopped.')
+        console.log('CallScreen: Screen sharing stopped via hook.')
       } catch (error) {
         console.error('CallScreen: Failed to stop screen share:', error)
         alert(
           `画面共有の停止に失敗しました: ${error instanceof Error ? error.message : String(error)}`
         )
+        // エラーでも状態をリセットしておく
         setIsScreenSharing(false)
       }
     } else {
+      // 共有中でない場合: 開始
       try {
+        // 他の人が共有中なら警告 (処理は続行)
         if (
           screenSharingPeerId &&
           screenSharingPeerId !== myPeerIdRef.current
@@ -423,412 +589,225 @@ export default function CallScreen() {
             '他の参加者'
           console.log(`Starting screen share, taking over from ${sharerName}`)
         }
-        await startScreenShare()
+        await startScreenShareHook()
         setIsScreenSharing(true)
-        console.log('CallScreen: Screen sharing started.')
+        console.log('CallScreen: Screen sharing started via hook.')
       } catch (error) {
         console.error('CallScreen: Failed to start screen share:', error)
+        // NotAllowedError はユーザーがキャンセルした場合なのでアラートしない
         if (error instanceof Error && error.name !== 'NotAllowedError') {
           alert(`画面共有の開始に失敗しました: ${error.message}`)
         }
-        setIsScreenSharing(false)
+        setIsScreenSharing(false) // エラー時は状態をリセット
       }
     }
-  }, [isScreenSharing, screenSharingPeerId, participants])
-
-  // leaveRoom
-  const leaveRoom = useCallback(() => {
-    console.log('CallScreen: Leaving room...')
-    router.push('/')
-  }, [router])
-
-  // --- メインの useEffect (初期化処理) ---
-  useEffect(() => {
-    console.log('[CallScreen useEffect] Initializing...')
-
-    // --- roomCode と name のチェック ---
-    if (!roomCode) {
-      router.push('/')
-      alert('ルームコードがありません')
-      return
-    }
-    const nameFromStorage = localStorage.getItem('my_name')
-    if (!nameFromStorage) {
-      router.push('/')
-      alert('名前が設定されていません')
-      return
-    }
-    if (!myName) setMyName(nameFromStorage)
-    // --- ここまで ---
-
-    let isMounted = true
-    let cleanupWebSocketListeners: (() => void) | null = null
-
-    // --- WebSocket イベントリスナー設定 ---
-    const setupWebSocketListeners = (
-      currentSocket: Socket,
-      peerIdForSocket: string
-    ) => {
-      console.log(
-        `CallScreen: Setting up WebSocket listeners for Peer ID: ${peerIdForSocket}`
-      )
-
-      const handleUserJoined = (payload: UserJoinedPayload) => {
-        const { peerId, name } = payload
-        if (!isMounted || peerId === myPeerIdRef.current) return
-        console.log(`CallScreen: User joined: ${name} (${peerId})`)
-        upsertParticipant({ id: peerId, name, isMuted: false, isSelf: false })
-        callPeer(peerId).catch((error) =>
-          console.error(`CallScreen: Failed to call new peer ${peerId}:`, error)
-        )
-      }
-      const handleUserLeft = (payload: UserLeftPayload) => {
-        if (!isMounted) return
-        console.log(`CallScreen: User left: ${payload.peerId}`)
-      }
-      const handleExistingParticipants = (
-        payload: ExistingParticipantsPayload
-      ) => {
-        if (!isMounted) return
-        console.log('CallScreen: Received existing participants:', payload)
-        const existingParticipants: Participant[] = Object.entries(payload)
-          .filter(([id]) => id !== myPeerIdRef.current)
-          .map(([id, name]) => ({ id, name, isMuted: false, isSelf: false }))
-        setParticipants((prev) => {
-          const self = prev.find((p) => p.isSelf)
-          const combined = self ? [self] : []
-          const existingIds = new Set(combined.map((p) => p.id))
-          existingParticipants.forEach((p) => {
-            if (!existingIds.has(p.id)) {
-              combined.push(p)
-              existingIds.add(p.id)
-            }
-          })
-          return combined
-        })
-        existingParticipants.forEach((p) => {
-          callPeer(p.id).catch((error) =>
-            console.error(
-              `CallScreen: Failed to call existing peer ${p.id}:`,
-              error
-            )
-          )
-        })
-      }
-
-      currentSocket.on('user-joined', handleUserJoined)
-      currentSocket.on('user-left', handleUserLeft)
-      currentSocket.on('existing-participants', handleExistingParticipants)
-
-      return () => {
-        // クリーンアップ関数
-        console.log(
-          `CallScreen: Removing WebSocket listeners for Peer ID: ${peerIdForSocket}`
-        )
-        currentSocket.off('user-joined', handleUserJoined)
-        currentSocket.off('user-left', handleUserLeft)
-        currentSocket.off('existing-participants', handleExistingParticipants)
-      }
-    }
-    // --- ここまで WebSocket イベントリスナー設定 ---
-
-    // ★★★ initializePeer 関数の定義をここに移動 ★★★
-    const initializePeer = async (
-      currentSocket: Socket,
-      currentMyName: string
-    ) => {
-      if (myPeerIdRef.current) {
-        console.log('CallScreen: PeerJS already initialized.')
-        return
-      }
-
-      try {
-        await getDevices()
-        const currentIsMuted = isMuted
-        console.log(
-          `[CallScreen initializePeer] Calling initPeer with name: "${currentMyName}"`
-        )
-
-        const peerOptions: InitPeerOptions = {
-          roomCode: roomCode,
-          // ★ 音声ストリーム受信
-          onReceiveStream: (stream: MediaStream, peerId: string) => {
-            if (!isMounted) return
-            if (!audioRefs.current[peerId]) {
-              const audio = new Audio()
-              audio.srcObject = stream
-              audio.dataset.peerId = peerId
-              const container = document.getElementById('audio-container')
-              if (container) container.appendChild(audio)
-              else document.body.appendChild(audio)
-              audio.play().catch((e) => console.error('Audio play failed:', e))
-              audioRefs.current[peerId] = audio
-              handleVolumeChange(peerId, participantVolumes[peerId] ?? 1.0)
-              if (selectedSpeakerId && typeof audio.setSinkId === 'function') {
-                audio
-                  .setSinkId(selectedSpeakerId)
-                  .catch((err) =>
-                    console.error('Failed to set sinkId on new audio:', err)
-                  )
-              }
-            }
-          },
-          // ★★★ 画面共有ストリーム受信コールバックを追加 ★★★
-          onReceiveScreenStream: (stream: MediaStream, peerId: string) => {
-            if (!isMounted) return
-            console.log(
-              `CallScreen: Received screen share stream from ${peerId}`
-            )
-            if (screenShareStream) {
-              console.log(
-                'Stopping previous screen share stream before setting new one.'
-              )
-              screenShareStream.getTracks().forEach((track) => track.stop())
-            }
-            setScreenShareStream(stream)
-            if (screenVideoRef.current) {
-              screenVideoRef.current.srcObject = stream
-              screenVideoRef.current
-                .play()
-                .catch((e) =>
-                  console.error('Screen share video play failed:', e)
-                )
-              console.log(
-                `CallScreen: Set screen share stream to video element for ${peerId}`
-              )
-            } else {
-              console.warn('Screen share video element ref not found.')
-            }
-          },
-          // ★ PeerJS 接続確立
-          onPeerOpen: (id: string) => {
-            if (!isMounted) return
-            console.log('CallScreen: Peer opened with ID:', id)
-            setMyPeerId(id)
-            myPeerIdRef.current = id
-            upsertParticipant({
-              id,
-              name: currentMyName,
-              isMuted: currentIsMuted,
-              isSelf: true,
-            })
-            cleanupWebSocketListeners = setupWebSocketListeners(
-              currentSocket,
-              id
-            )
-            if (currentSocket.connected) {
-              console.log(
-                `CallScreen: Emitting join-room (from onPeerOpen) with peerId: ${id}`
-              )
-              const payload: JoinRoomPayload = {
-                roomCode,
-                peerId: id,
-                name: currentMyName,
-              }
-              currentSocket.emit('join-room', payload)
-            }
-          },
-          // ★ ローカルメディアストリーム取得
-          onLocalStream: (stream: MediaStream) => {
-            // ★ 型指定済み
-            if (!isMounted) return
-            console.log('CallScreen: Local stream obtained.')
-            localStreamRef.current = stream
-            const audioTrack = stream.getAudioTracks()[0]
-            if (audioTrack) {
-              audioTrack.enabled = !currentIsMuted
-              startLocalAudioAnalysis(stream)
-            }
-          },
-          // ★ 参加者名受信
-          onReceiveUserName: (peerId: string, name: string) => {
-            if (!isMounted) return
-            upsertParticipant({ id: peerId, name })
-          },
-          // ★ ミュート状態受信
-          onReceiveMuteStatus: (peerId: string, isMutedStatus: boolean) => {
-            if (!isMounted) return
-            upsertParticipant({ id: peerId, isMuted: isMutedStatus })
-          },
-          // ★ 参加者切断
-          onPeerDisconnect: (peerId: string) => {
-            if (!isMounted) return
-            removePeer(peerId)
-          },
-          // ★ 話者検出状態受信
-          onSpeakingStatusChange: (peerId: string, isSpeaking: boolean) => {
-            // ★ 型指定済み
-            if (!isMounted) return
-            upsertParticipant({ id: peerId, isSpeaking })
-          },
-          // ★★★ 画面共有状態受信コールバック (クリア処理を追加) ★★★
-          onReceiveScreenShareStatus: (peerId: string, isSharing: boolean) => {
-            // ★ 型指定済み
-            if (!isMounted) return
-            console.log(
-              `[CallScreen] Received screen share status from ${peerId}: ${isSharing}`
-            )
-            if (isSharing) {
-              setScreenSharingPeerId((prevSharerId) => {
-                if (prevSharerId !== peerId) {
-                  if (prevSharerId === myPeerIdRef.current) {
-                    console.warn(
-                      `Peer ${peerId} started sharing, stopping local screen share.`
-                    )
-                    stopScreenShare().catch((err) =>
-                      console.error(
-                        'Error stopping local share on conflict:',
-                        err
-                      )
-                    )
-                    setIsScreenSharing(false)
-                  }
-                  if (screenShareStream) {
-                    console.log(
-                      'Clearing previous screen share stream as sharer changed.'
-                    )
-                    screenShareStream
-                      .getTracks()
-                      .forEach((track) => track.stop())
-                    setScreenShareStream(null)
-                    if (screenVideoRef.current) {
-                      screenVideoRef.current.srcObject = null
-                    }
-                  }
-                }
-                return peerId
-              })
-            } else {
-              setScreenSharingPeerId((prevSharerId) => {
-                if (prevSharerId === peerId) {
-                  console.log(
-                    `CallScreen: Peer ${peerId} stopped screen sharing, clearing stream.`
-                  )
-                  if (screenShareStream) {
-                    screenShareStream
-                      .getTracks()
-                      .forEach((track) => track.stop())
-                  }
-                  setScreenShareStream(null)
-                  if (screenVideoRef.current) {
-                    screenVideoRef.current.srcObject = null
-                  }
-                  return null
-                }
-                return prevSharerId
-              })
-            }
-          },
-        } // ここまで peerOptions
-        await initPeer(peerOptions, currentMyName, currentIsMuted)
-      } catch (error) {
-        console.error('CallScreen: PeerJS initialization failed:', error)
-        if (isMounted) alert('通話機能の初期化に失敗しました。')
-      }
-    } // ここまで initializePeer
-
-    // --- Socket 初期化 & 接続 ---
-    let socket: Socket | null = socketRef.current
-    if (!socket || !socket.connected) {
-      socket?.disconnect()
-      console.log('CallScreen: Initializing WebSocket connection...')
-      socket = io(WEBSOCKET_SERVER_URL)
-      socketRef.current = socket
-
-      socket.on('connect', () => {
-        console.log(
-          '★★★ CallScreen: WebSocket connected! Socket ID:',
-          socket?.id
-        )
-        initializePeer(socket!, nameFromStorage) // connect 後なので non-null
-      })
-      socket.on('connect_error', (error) => {
-        console.error('CallScreen: WebSocket connection error:', error)
-        alert('サーバーとの接続に失敗しました。')
-      })
-      socket.on('disconnect', (reason) => {
-        console.log('CallScreen: WebSocket disconnected:', reason)
-        disconnectAll() // PeerJS も切断
-        setParticipants([])
-        setMyPeerId('')
-        myPeerIdRef.current = ''
-        setScreenSharingPeerId(null)
-        setScreenShareStream(null)
-        if (screenVideoRef.current) screenVideoRef.current.srcObject = null
-      })
-    } else if (socket.connected && !myPeerId) {
-      console.log(
-        'CallScreen: WebSocket already connected, initializing PeerJS...'
-      )
-      initializePeer(socket, nameFromStorage)
-    }
-    // --- ここまで Socket 初期化 ---
-
-    // --- メイン useEffect のクリーンアップ関数 ---
-    return () => {
-      isMounted = false
-      console.log('CallScreen: Cleaning up (useEffect)...')
-      if (cleanupWebSocketListeners) cleanupWebSocketListeners()
-      stopLocalAudioAnalysis()
-      // ★★★ 受信画面共有ストリーム停止 ★★★
-      if (screenShareStream) {
-        console.log('Cleanup: Stopping received screen share stream.')
-        screenShareStream.getTracks().forEach((track) => track.stop())
-      }
-      if (screenVideoRef.current) {
-        screenVideoRef.current.srcObject = null
-      }
-      // ★ オーディオ要素クリーンアップ
-      Object.values(audioRefs.current).forEach((audio) => {
-        audio.pause()
-        audio.srcObject = null
-        audio.remove()
-      })
-      audioRefs.current = {}
-      // disconnectAll はアンマウント時に呼び出す
-    }
-    // --- ここまでメイン useEffect のクリーンアップ ---
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    roomCode,
-    router,
-    getDevices,
-    myName,
-    isMuted,
-    // participantVolumes,
-    selectedSpeakerId,
-    // startLocalAudioAnalysis,
-    // stopLocalAudioAnalysis,
-    // removePeer,
-    // upsertParticipant,
-  ])
-  // --- ここまでメインの useEffect ---
+    isScreenSharing,
+    screenSharingPeerId,
+    participants, // participants はログ表示にのみ使用
+    startScreenShareHook,
+    stopScreenShareHook,
+  ]) // myPeerIdFromHook は不要 (myPeerIdRef.current で比較するため)
+
+  // --- useEffect フック ---
+
+  // myPeerIdRef の更新
+  useEffect(() => {
+    if (myPeerIdFromHook) {
+      myPeerIdRef.current = myPeerIdFromHook
+      // 自分の情報を Participant リストに追加/更新
+      upsertParticipant({
+        id: myPeerIdFromHook,
+        name: myName,
+        isMuted: isMuted,
+        isSelf: true,
+      })
+    }
+  }, [myPeerIdFromHook, myName, isMuted, upsertParticipant]) // isMuted, myName, upsertParticipant も依存配列に追加
+
+  // localStreamRef の更新 & 音声分析開始/停止
+  useEffect(() => {
+    localStreamRef.current = localStream
+    if (localStream) {
+      startLocalAudioAnalysis(localStream)
+    } else {
+      stopLocalAudioAnalysis()
+    }
+    // クリーンアップ関数で分析を停止
+    return () => {
+      stopLocalAudioAnalysis()
+    }
+  }, [localStream, startLocalAudioAnalysis, stopLocalAudioAnalysis])
+
+  // --- WebSocket 関連 useEffect (接続管理) ---
+  useEffect(() => {
+    console.log('[CallScreen WebSocket Connection useEffect] Initializing...')
+    if (!roomCode) {
+      console.error('Room code is missing.')
+      router.push('/') // 必要ならリダイレクト
+      return
+    }
+
+    // マウント状態を管理する Ref
+    const isMounted = { current: true }
+
+    // 既に接続済み、または接続試行中の場合は何もしない
+    if (socketRef.current) {
+      if (socketRef.current.connected && !socketInstance) {
+        setSocketInstance(socketRef.current)
+      }
+      return
+    }
+
+    console.log('CallScreen: Initializing WebSocket connection...')
+    const socket = io(WEBSOCKET_SERVER_URL)
+    socketRef.current = socket // Ref に保持
+
+    socket.on('connect', () => {
+      console.log('★★★ CallScreen: WebSocket connected! Socket ID:', socket.id)
+      if (isMounted.current) {
+        setSocketInstance(socket) // State を更新
+      }
+    })
+
+    socket.on('connect_error', (error) => {
+      console.error('CallScreen: WebSocket connection error:', error)
+      alert('サーバーとの接続に失敗しました。')
+      socketRef.current = null // Ref をクリア
+      if (isMounted.current) {
+        setSocketInstance(null) // State をクリア
+      }
+    })
+
+    socket.on('disconnect', (reason) => {
+      console.log('CallScreen: WebSocket disconnected:', reason)
+      if (isMounted.current) {
+        setSocketInstance(null) // State をクリア
+      }
+      // CallScreen の他の State をリセット
+      setParticipants([])
+      myPeerIdRef.current = ''
+      setScreenSharingPeerId(null)
+      setScreenShareStream(null)
+      if (screenVideoRef.current) screenVideoRef.current.srcObject = null
+      // Ref もクリア
+      socketRef.current = null
+    })
+
+    // クリーンアップ関数
+    return () => {
+      isMounted.current = false
+      console.log('CallScreen: Cleaning up WebSocket Connection useEffect...')
+      // アンマウント時に切断 (アンマウント用 useEffect で行うためコメントアウト)
+      // socketRef.current?.disconnect();
+      // socketRef.current = null;
+    }
+    // roomCode が変わることは想定しないが、念のため依存配列に含める
+  }, [roomCode, router, socketInstance]) // socketInstance を依存配列に追加
+
+  // --- WebSocket 関連 useEffect (リスナー設定) ---
+  useEffect(() => {
+    // socketInstance が null (未接続 or 切断) の場合はリスナーを設定しない
+    if (!socketInstance) {
+      return
+    }
+
+    console.log('[CallScreen WebSocket Listeners useEffect] Setting up...')
+
+    const handleUserJoined = (payload: UserJoinedPayload) => {
+      const { peerId, name } = payload
+      // 自分の Peer ID と同じ場合は無視
+      if (peerId === myPeerIdRef.current) return
+      console.log(`CallScreen: User joined: ${name} (${peerId})`)
+      upsertParticipant({ id: peerId, name, isMuted: false, isSelf: false })
+      // 新規参加者に発信
+      callPeerHook(peerId).catch((error) =>
+        console.error(`CallScreen: Failed to call new peer ${peerId}:`, error)
+      )
+    }
+    const handleUserLeft = (payload: UserLeftPayload) => {
+      console.log(`CallScreen: User left: ${payload.peerId}`)
+      // 参加者削除は PeerJS の onPeerDisconnect で処理されるため、ここでは何もしない
+      // removePeer(payload.peerId);
+    }
+    const handleExistingParticipants = (
+      payload: ExistingParticipantsPayload
+    ) => {
+      console.log('CallScreen: Received existing participants:', payload)
+      const currentPeerId = myPeerIdRef.current
+      const existingParticipants: Participant[] = Object.entries(payload)
+        // 自分自身は除外
+        .filter(([id]) => id !== currentPeerId)
+        .map(([id, name]) => ({ id, name, isMuted: false, isSelf: false }))
+
+      // 既存参加者をリストに追加/更新
+      existingParticipants.forEach((p) => upsertParticipant(p))
+      // 既存参加者に発信
+      existingParticipants.forEach((p) => {
+        callPeerHook(p.id).catch((error) =>
+          console.error(
+            `CallScreen: Failed to call existing peer ${p.id}:`,
+            error
+          )
+        )
+      })
+    }
+
+    socketInstance.on('user-joined', handleUserJoined)
+    socketInstance.on('user-left', handleUserLeft)
+    socketInstance.on('existing-participants', handleExistingParticipants)
+
+    // クリーンアップ関数
+    return () => {
+      console.log('[CallScreen WebSocket Listeners useEffect] Cleaning up...')
+      socketInstance.off('user-joined', handleUserJoined)
+      socketInstance.off('user-left', handleUserLeft)
+      socketInstance.off('existing-participants', handleExistingParticipants)
+    }
+    // socketInstance と、コールバック内で使う安定した関数に依存
+  }, [socketInstance, upsertParticipant, callPeerHook])
+
+  // --- WebSocket 関連 useEffect (join-room 送信) ---
+  useEffect(() => {
+    // socket と peerId の両方が準備できてから join-room を送信
+    if (socketInstance && myPeerIdFromHook && myName) {
+      console.log(
+        `CallScreen: Emitting join-room with peerId: ${myPeerIdFromHook}`
+      )
+      const joinPayload: JoinRoomPayload = {
+        roomCode,
+        peerId: myPeerIdFromHook,
+        name: myName,
+      }
+      socketInstance.emit('join-room', joinPayload)
+    }
+  }, [socketInstance, myPeerIdFromHook, myName, roomCode]) // 必要な値すべてに依存
 
   // --- アンマウント用 useEffect ---
   useEffect(() => {
     return () => {
       console.log('CallScreen: Component unmounting, disconnecting everything.')
-      stopLocalAudioAnalysis()
-      // ★★★ 受信画面共有ストリーム停止 ★★★
+      // 受信画面共有ストリーム停止
       if (screenVideoRef.current && screenVideoRef.current.srcObject) {
         const stream = screenVideoRef.current.srcObject as MediaStream
         stream?.getTracks().forEach((track) => track.stop())
         screenVideoRef.current.srcObject = null
       }
+      // WebSocket 切断
       socketRef.current?.disconnect()
-      disconnectAll() // PeerJS 切断 & リソース解放
       socketRef.current = null
+      // PeerJS 切断 & リソース解放
+
       console.log('CallScreen: Disconnected socket and PeerJS on unmount.')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // ★ アンマウント時に一度だけ実行
+  }, []) // アンマウント時に一度だけ実行
 
   // --- デフォルト音量設定 useEffect ---
   useEffect(() => {
     const newVolumes = { ...participantVolumes }
     let changed = false
     participants.forEach((p) => {
+      // 自分以外の参加者で、まだ音量設定がない場合にデフォルト値(1.0)を設定
       if (!p.isSelf && !(p.id in newVolumes)) {
         newVolumes[p.id] = 1.0
         changed = true
@@ -837,7 +816,12 @@ export default function CallScreen() {
     if (changed) {
       setParticipantVolumes(newVolumes)
     }
-  }, [participants, participantVolumes])
+  }, [participants, participantVolumes]) // participants が変更されたら実行
+
+  // --- デバイス取得 useEffect ---
+  useEffect(() => {
+    getDevices()
+  }, [getDevices]) // getDevices は useCallback でラップされている
 
   // --- JSX レンダリング ---
   return (
@@ -867,7 +851,7 @@ export default function CallScreen() {
       {/* 共有中インジケーター */}
       {screenSharingPeerId && (
         <div className={styles.sharingIndicator}>
-          {screenSharingPeerId === myPeerIdRef.current
+          {screenSharingPeerId === myPeerIdRef.current // ★ myPeerIdRef を使う
             ? 'あなたが画面共有中です'
             : `${participants.find((p) => p.id === screenSharingPeerId)?.name || '参加者'}が画面共有中です`}
         </div>
@@ -885,7 +869,6 @@ export default function CallScreen() {
                 <span className={styles.participantName}>
                   {p.name} (あなた)
                 </span>{' '}
-                {/* 自分だとわかるように */}
                 <span
                   className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
                 >
@@ -933,7 +916,7 @@ export default function CallScreen() {
         speakers={speakers}
         selectedMicId={selectedMicId}
         selectedSpeakerId={selectedSpeakerId}
-        localStream={localStreamRef.current}
+        localStream={localStream}
         toggleMic={toggleMic}
         toggleScreenShare={toggleScreenShare}
         handleMicChange={handleMicChange}
