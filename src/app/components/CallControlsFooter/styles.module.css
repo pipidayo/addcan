@@ -1,0 +1,115 @@
+/* src/app/components/CallControlsFooter/styles.module.css */
+.footerContainer {
+  position: fixed; /* 画面下部に固定 */
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #282c34; /* 背景色 */
+  padding: 10px 20px;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.2);
+  z-index: 1000; /* 他の要素より手前に表示 */
+  display: flex; /* ボタンと設定ポップアップの位置調整用 */
+  justify-content: center; /* ボタン類を中央寄せ */
+  align-items: center;
+}
+
+.controls {
+  display: flex;
+  gap: 15px; /* ボタン間のスペース */
+}
+
+.controlButton {
+  background-color: #4a4e5a;
+  color: white;
+  border: none;
+  border-radius: 50%; /* 丸いボタン */
+  width: 50px;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  font-size: 1.5rem; /* アイコンサイズ調整 */
+  transition: background-color 0.2s ease;
+}
+
+.controlButton:hover {
+  background-color: #616570;
+}
+
+.controlButton:disabled {
+  background-color: #3a3d44;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.mutedButton {
+  background-color: #d9534f; /* ミュート時は赤色など */
+}
+.mutedButton:hover {
+  background-color: #c9302c;
+}
+
+.stopButton {
+  background-color: #f0ad4e; /* 停止ボタンはオレンジなど */
+}
+.stopButton:hover {
+  background-color: #ec971f;
+}
+
+.leaveButton {
+  background-color: #d9534f; /* 退出ボタンは赤 */
+}
+.leaveButton:hover {
+  background-color: #c9302c;
+}
+
+/* デバイス設定ポップアップ */
+.deviceSettingsPopup {
+  position: absolute; /* フッターに対して絶対配置 */
+  bottom: 70px; /* フッターボタンの上あたり */
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #3a3d44;
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 250px; /* 最小幅 */
+  z-index: 1001; /* ボタンより手前 */
+}
+
+.deviceSelector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.deviceSelector label {
+  color: #eee;
+  min-width: 60px; /* ラベル幅を揃える */
+}
+
+.deviceSelector select {
+  flex-grow: 1;
+  padding: 5px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #fff;
+}
+
+.closeButton {
+  margin-top: 10px;
+  padding: 5px 10px;
+  background-color: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  align-self: flex-end; /* 右寄せ */
+}
+.closeButton:hover {
+  background-color: #5a6268;
+}
