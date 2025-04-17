@@ -67,7 +67,6 @@ export default function CallScreen() {
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
   const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([])
   const [selectedMicId, setSelectedMicId] = useState<string>('')
-  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('')
   const localAudioAnalysis = useRef<LocalAudioAnalysisRefs>({
     context: null,
     analyser: null,
@@ -94,6 +93,13 @@ export default function CallScreen() {
   const [screenShareStream, setScreenShareStream] =
     useState<MediaStream | null>(null)
 
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('')
+  // ★ selectedSpeakerId の最新値を保持する Ref を追加
+  const selectedSpeakerIdRef = useRef(selectedSpeakerId)
+  useEffect(() => {
+    selectedSpeakerIdRef.current = selectedSpeakerId
+  }, [selectedSpeakerId]) // selectedSpeakerId が更新されたら Ref も更新
+
   // --- ここまで State と Ref 定義 ---
 
   // --- コールバック関数 (usePeerConnection に渡すもの) ---
@@ -115,9 +121,12 @@ export default function CallScreen() {
         // handleVolumeChange は state を更新する関数なので依存配列に不要
         handleVolumeChange(peerId, initialVolume) // handleVolumeChange は useCallback 不要
 
-        if (selectedSpeakerId && typeof audio.setSinkId === 'function') {
+        if (
+          selectedSpeakerIdRef.current &&
+          typeof audio.setSinkId === 'function'
+        ) {
           audio
-            .setSinkId(selectedSpeakerId)
+            .setSinkId(selectedSpeakerIdRef.current)
             .catch((err) =>
               console.error('Failed to set sinkId on new audio:', err)
             )
@@ -125,7 +134,7 @@ export default function CallScreen() {
       }
     },
     // ★ participantVolumes を依存配列から削除
-    [selectedSpeakerId]
+    [participantVolumesRef]
     // handleVolumeChange は useCallback でラップ不要 (useState の set 関数は安定)
   )
 

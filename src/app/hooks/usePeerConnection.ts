@@ -191,8 +191,7 @@ export function usePeerConnection({
     // 依存配列: これらの値が変わったら再接続が必要
     roomCode,
     myName,
-    isMuted,
-
+    socket,
     // コールバック関数は useCallback でメモ化されている前提
     onReceiveAudioStream,
     onReceiveScreenStream,

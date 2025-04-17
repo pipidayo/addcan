@@ -286,8 +286,16 @@ export class PeerManager {
   ) {
     console.log(
       `[PeerManager instance ${this.peer?.id}] Replacing ${kind} track for all connections with track:`,
-      newTrack
+      newTrack?.id ?? 'null' // トラックIDもログに出す
     )
+    // ★ 接続がない場合は何もしない
+    if (Object.keys(this.mediaConnections).length === 0) {
+      console.log(
+        `[PeerManager instance ${this.peer?.id}] No media connections to replace track on.`
+      )
+      return
+    }
+
     for (const peerId in this.mediaConnections) {
       const conn = this.mediaConnections[peerId]
       const peerConnection = conn.peerConnection as
@@ -302,31 +310,52 @@ export class PeerManager {
             `[PeerManager instance ${this.peer?.id}] Replacing ${kind} track for connection with ${peerId}`
           )
           try {
+            console.log(
+              `[PeerManager instance ${this.peer?.id}] Attempting sender.replaceTrack() for ${peerId}...`
+            )
             await sender.replaceTrack(newTrack)
+            console.log(
+              // ★ 成功ログを追加
+              `[PeerManager instance ${this.peer?.id}] Successfully replaced ${kind} track for ${peerId}. New track: ${sender.track?.id ?? 'null'}`
+            )
           } catch (replaceError) {
             console.error(
+              // ★ エラーログをより詳細に
               `[PeerManager instance ${this.peer?.id}] Failed to replace ${kind} track for ${peerId}:`,
               replaceError
             )
           }
         } else if (newTrack && this.localStream) {
+          // この部分は通常、最初の接続時に使われるはず
           console.log(
-            `[PeerManager instance ${this.peer?.id}] Adding ${kind} track for connection with ${peerId}`
+            `[PeerManager instance ${this.peer?.id}] Sender for ${kind} not found. Attempting peerConnection.addTrack() for ${peerId}`
           )
           try {
             peerConnection.addTrack(newTrack, this.localStream)
+            console.log(
+              // ★ 成功ログを追加
+              `[PeerManager instance ${this.peer?.id}] Successfully added ${kind} track for ${peerId}.`
+            )
           } catch (addError) {
             console.error(
               `[PeerManager instance ${this.peer?.id}] Failed to add ${kind} track for ${peerId}:`,
               addError
             )
           }
+        } else {
+          console.warn(
+            `[PeerManager instance ${this.peer?.id}] Could not find sender for ${kind} and no new track to add for ${peerId}.`
+          )
         }
+      } else {
+        console.warn(
+          `[PeerManager instance ${this.peer?.id}] No peerConnection found for media connection with ${peerId}.`
+        )
       }
     }
   }
 
-  // --- メッセージ送信メソッド ---
+  // --- メッセージ送信メソッド --
   private sendMessage(
     type: Message['type'],
     payload: Message['payload'],
@@ -435,11 +464,26 @@ export class PeerManager {
             call.answer(this.localStream)
             call.on('stream', (remoteStream) => {
               console.log(
-                `[PeerManager instance ${this.peer?.id}] Received stream from ${call.peer}`
+                `[PeerManager instance ${this.peer?.id}] ★★★ Received 'stream' event from ${call.peer}. Stream ID: ${remoteStream.id}`
               )
+              console.log(
+                `    Audio Tracks: ${remoteStream.getAudioTracks().length}, Video Tracks: ${remoteStream.getVideoTracks().length}`
+              )
+              remoteStream.getTracks().forEach((track) => {
+                console.log(
+                  `    - Track: kind=${track.kind}, id=${track.id}, label=${track.label}, readyState=${track.readyState}`
+                )
+              })
+
               if (remoteStream.getVideoTracks().length > 0) {
+                console.log(
+                  `[PeerManager instance ${this.peer?.id}] Detected VIDEO stream from ${call.peer}. Calling onReceiveScreenStream.`
+                ) // 確認用ログ
                 this.options?.onReceiveScreenStream(remoteStream, call.peer)
               } else {
+                console.log(
+                  `[PeerManager instance ${this.peer?.id}] Detected AUDIO stream from ${call.peer}. Calling onReceiveStream.`
+                ) // 確認用ログ
                 this.options?.onReceiveStream(remoteStream, call.peer)
                 this.startAudioAnalysis(call.peer, remoteStream)
               }
