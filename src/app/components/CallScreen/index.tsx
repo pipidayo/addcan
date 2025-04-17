@@ -103,6 +103,7 @@ export default function CallScreen() {
   // --- ここまで State と Ref 定義 ---
 
   // --- コールバック関数 (usePeerConnection に渡すもの) ---
+
   const handleReceiveAudioStream = useCallback(
     (stream: MediaStream, peerId: string) => {
       console.log(`CallScreen: Received audio stream from ${peerId}`)
@@ -116,10 +117,8 @@ export default function CallScreen() {
         audio.play().catch((e) => console.error('Audio play failed:', e))
         audioRefs.current[peerId] = audio
 
-        // ★ Ref を使って最新の音量を取得
         const initialVolume = participantVolumesRef.current[peerId] ?? 1.0
-        // handleVolumeChange は state を更新する関数なので依存配列に不要
-        handleVolumeChange(peerId, initialVolume) // handleVolumeChange は useCallback 不要
+        handleVolumeChange(peerId, initialVolume)
 
         if (
           selectedSpeakerIdRef.current &&
@@ -133,28 +132,17 @@ export default function CallScreen() {
         }
       }
     },
-    // ★ participantVolumes を依存配列から削除
-    [participantVolumesRef]
-    // handleVolumeChange は useCallback でラップ不要 (useState の set 関数は安定)
+    [participantVolumesRef] // Ref は安定しているので依存配列に含めてもOK
   )
+  // ★★★ ここまでが正しい AudioStream の処理 ★★★
 
+  // ★ handleReceiveScreenStream の定義 (これは正しいはず)
   const handleReceiveScreenStream = useCallback(
     (stream: MediaStream, peerId: string) => {
       console.log(`CallScreen: Received screen share stream from ${peerId}`)
-      setScreenShareStream(stream)
-      if (screenVideoRef.current) {
-        screenVideoRef.current.srcObject = stream
-        screenVideoRef.current
-          .play()
-          .catch((e) => console.error('Screen share video play failed:', e))
-        console.log(
-          `CallScreen: Set screen share stream to video element for ${peerId}`
-        )
-      } else {
-        console.warn('Screen share video element ref not found.')
-      }
+      setScreenShareStream(stream) // ★ state を更新するだけ
     },
-    []
+    [] // 依存配列は空でOK
   )
 
   // 音量変更ハンドラ
@@ -427,7 +415,7 @@ export default function CallScreen() {
   // ★ peerCallbacks の useMemo の依存配列も更新
   const peerCallbacks = useMemo(
     () => ({
-      onReceiveAudioStream: handleReceiveAudioStream, // ★ 更新された関数を参照
+      onReceiveAudioStream: handleReceiveAudioStream,
       onReceiveScreenStream: handleReceiveScreenStream,
       onParticipantUpdate: upsertParticipant,
       onParticipantRemove: removePeer,
@@ -831,6 +819,24 @@ export default function CallScreen() {
   useEffect(() => {
     getDevices()
   }, [getDevices]) // getDevices は useCallback でラップされている
+
+  // ★★★ 画面共有ストリームを video 要素に設定する useEffect を追加 ★★★
+  useEffect(() => {
+    if (screenVideoRef.current && screenShareStream) {
+      console.log('CallScreen: Setting screen share stream to video element.')
+      screenVideoRef.current.srcObject = screenShareStream
+      screenVideoRef.current.play().catch((e) => {
+        console.error('Screen share video play failed:', e)
+        // 自動再生失敗時のフォールバック (例: ユーザーに再生ボタンを表示)
+      })
+    } else {
+      // ストリームが null になった場合 (共有停止時など) は srcObject もクリア
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = null
+      }
+    }
+  }, [screenShareStream]) // screenShareStream が変更されたら実行
+  // screenVideoRef は Ref なので依存配列に含める必要はない
 
   // --- JSX レンダリング ---
   return (
