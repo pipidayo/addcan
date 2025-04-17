@@ -1,10 +1,7 @@
 // src/app/components/CallControlsFooter/index.tsx
-import React, { useMemo } from 'react'
+import React, { useMemo, useCallback, useState } from 'react'
 import styles from './styles.module.css'
 import type { Participant } from '../CallScreen'
-
-// ★ 任意: アイコンを使う場合
-// import { MicrophoneIcon, VideoCameraIcon, PhoneXMarkIcon, Cog6ToothIcon, ComputerDesktopIcon, StopCircleIcon } from '@heroicons/react/24/outline';
 
 // Props の型定義
 interface CallControlsFooterProps {
@@ -14,15 +11,16 @@ interface CallControlsFooterProps {
   speakers: MediaDeviceInfo[]
   selectedMicId: string
   selectedSpeakerId: string
-  localStream: MediaStream | null // ボタンの disabled 判定用
+  localStream: MediaStream | null
   toggleMic: () => void
   toggleScreenShare: () => void
   handleMicChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   handleSpeakerChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   leaveRoom: () => void
-  myPeerId: string // 自分の Peer ID
-  participants: Participant[] // 参加者リスト (名前検索用)
-  screenSharingPeerId: string | null // 誰が共有中か (null なら誰も共有していない)
+  myPeerId: string
+  participants: Participant[]
+  screenSharingPeerId: string | null
+  roomCode: string | undefined
 }
 
 export default function CallControlsFooter({
@@ -41,13 +39,15 @@ export default function CallControlsFooter({
   screenSharingPeerId,
   myPeerId,
   participants,
+  roomCode,
 }: CallControlsFooterProps) {
-  const [showDeviceSettings, setShowDeviceSettings] = React.useState(false) // デバイス設定の表示/非表示
+  const [showDeviceSettings, setShowDeviceSettings] = useState(false)
+  const [isCopied, setIsCopied] = useState(false) // コピー完了状態
+  const displayCode = useMemo(() => roomCode?.replace('room-', ''), [roomCode])
 
   console.log('[CallControlsFooter] Received Props:', {
     screenSharingPeerId,
     myPeerId,
-    // participants, // participants は量が多いので一旦コメントアウトしてもOK
   })
 
   const sharingParticipantName = useMemo(() => {
@@ -58,11 +58,32 @@ export default function CallControlsFooter({
     )
   }, [screenSharingPeerId, myPeerId, participants])
 
+  // ★ コピー処理 (波紋ロジックは削除)
+  const handleCopyCode = useCallback(() => {
+    if (!displayCode || isCopied) return
+
+    const textToCopy = `部屋コード: ${displayCode}` // ラベルも含めてコピー
+    navigator.clipboard
+      .writeText(textToCopy)
+      .then(() => {
+        console.log('Text copied to clipboard:', textToCopy)
+        setIsCopied(true) // 吹き出し表示開始
+        setTimeout(() => {
+          setIsCopied(false) // 吹き出し非表示
+        }, 1500) // 吹き出し表示時間
+      })
+      .catch((err) => {
+        console.error('Failed to copy text:', err)
+        alert('テキストのコピーに失敗しました。')
+      })
+  }, [displayCode, isCopied])
+
   return (
     <div className={styles.footerContainer}>
-      {/* デバイス設定エリア (ポップアップなど) */}
+      {/* デバイス設定エリア */}
       {showDeviceSettings && (
         <div className={styles.deviceSettingsPopup}>
+          {/* ... (中身は変更なし) ... */}
           <div className={styles.deviceSelector}>
             <label htmlFor='mic-select-footer'>マイク:</label>
             <select
@@ -102,51 +123,66 @@ export default function CallControlsFooter({
         </div>
       )}
 
-      {/* メインコントロールボタン */}
+      {/* メインコントロール */}
       <div className={styles.controls}>
+        {/* ルームコード表示＆コピー */}
+        {displayCode && (
+          // ↓↓↓ 位置決めの基準となるコンテナ ↓↓↓
+          <div className={styles.roomCodeContainerFooter}>
+            <span className={styles.roomLabelFooter}>部屋コード:</span>
+            <div
+              className={styles.roomCodeFooter} // ★ .copied クラスは不要
+              onClick={handleCopyCode}
+              title={'クリックしてルームコードをコピー'}
+            >
+              <span className={styles.roomCodeValueFooter}>
+                {/* 表示はずっとコード本体 */}
+                {displayCode}
+              </span>
+              <div
+                className={`${styles.copyTooltip} ${isCopied ? styles.visible : ''}`}
+              >
+                コピー完了！
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 画面共有インジケーター */}
         {sharingParticipantName && (
           <div className={styles.footerSharingIndicator}>
             {sharingParticipantName}が画面共有中
           </div>
         )}
+
+        {/* 各種コントロールボタン */}
         <button
           onClick={toggleMic}
           className={`${styles.controlButton} ${isMuted ? styles.mutedButton : ''}`}
-          disabled={!localStream} // ローカルストリームがない場合は無効
+          disabled={!localStream}
           title={isMuted ? 'ミュート解除' : 'ミュート'}
         >
-          {/* ★ アイコン例 */}
-          {/* <MicrophoneIcon width={24} height={24} /> */}
           {isMuted ? '🔇' : '🎤'}
         </button>
-
         <button
           onClick={toggleScreenShare}
           className={`${styles.controlButton} ${isScreenSharing ? styles.stopButton : ''}`}
           title={isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
         >
-          {/* ★ アイコン例 */}
-          {/* {isScreenSharing ? <StopCircleIcon width={24} height={24} /> : <ComputerDesktopIcon width={24} height={24} />} */}
           🖥️
         </button>
-
         <button
           onClick={() => setShowDeviceSettings(!showDeviceSettings)}
           className={styles.controlButton}
           title='デバイス設定'
         >
-          {/* ★ アイコン例 */}
-          {/* <Cog6ToothIcon width={24} height={24} /> */}
           ⚙️
         </button>
-
         <button
           onClick={leaveRoom}
           className={`${styles.controlButton} ${styles.leaveButton}`}
           title='退出'
         >
-          {/* ★ アイコン例 */}
-          {/* <PhoneXMarkIcon width={24} height={24} /> */}
           📞
         </button>
       </div>

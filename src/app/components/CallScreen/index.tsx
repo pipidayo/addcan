@@ -941,6 +941,7 @@ export default function CallScreen() {
         screenSharingPeerId={screenSharingPeerId}
         myPeerId={myPeerIdRef.current} // Ref の現在の値を渡す
         participants={participants}
+        roomCode={roomCode}
       />
 
       {/* オーディオ要素用コンテナ */}

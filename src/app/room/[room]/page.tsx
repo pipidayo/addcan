@@ -1,6 +1,5 @@
 'use client'
 import { useParams } from 'next/navigation'
-import RoomHeader from '@/app/components/RoomHeader'
 import CallScreen from '@/app/components/CallScreen'
 import styles from './styles.module.css'
 
@@ -20,8 +19,6 @@ export default function RoomPage() {
 
   return (
     <div className={styles.container}>
-      {/* RoomHeader は必要に応じて残す or CallScreen 内に統合 */}
-      <RoomHeader roomCode={roomCode} />
       <CallScreen /> {/* ★ CallScreen を使用 (props は不要) */}
     </div>
   )
