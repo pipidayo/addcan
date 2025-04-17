@@ -1,6 +1,7 @@
 // src/app/components/CallControlsFooter/index.tsx
-import React from 'react'
+import React, { useMemo } from 'react'
 import styles from './styles.module.css'
+import type { Participant } from '../CallScreen'
 
 // ★ 任意: アイコンを使う場合
 // import { MicrophoneIcon, VideoCameraIcon, PhoneXMarkIcon, Cog6ToothIcon, ComputerDesktopIcon, StopCircleIcon } from '@heroicons/react/24/outline';
@@ -19,6 +20,9 @@ interface CallControlsFooterProps {
   handleMicChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   handleSpeakerChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   leaveRoom: () => void
+  myPeerId: string // 自分の Peer ID
+  participants: Participant[] // 参加者リスト (名前検索用)
+  screenSharingPeerId: string | null // 誰が共有中か (null なら誰も共有していない)
 }
 
 export default function CallControlsFooter({
@@ -34,8 +38,25 @@ export default function CallControlsFooter({
   handleMicChange,
   handleSpeakerChange,
   leaveRoom,
+  screenSharingPeerId,
+  myPeerId,
+  participants,
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = React.useState(false) // デバイス設定の表示/非表示
+
+  console.log('[CallControlsFooter] Received Props:', {
+    screenSharingPeerId,
+    myPeerId,
+    // participants, // participants は量が多いので一旦コメントアウトしてもOK
+  })
+
+  const sharingParticipantName = useMemo(() => {
+    if (!screenSharingPeerId) return null
+    if (screenSharingPeerId === myPeerId) return 'あなた'
+    return (
+      participants.find((p) => p.id === screenSharingPeerId)?.name || '参加者'
+    )
+  }, [screenSharingPeerId, myPeerId, participants])
 
   return (
     <div className={styles.footerContainer}>
@@ -83,6 +104,11 @@ export default function CallControlsFooter({
 
       {/* メインコントロールボタン */}
       <div className={styles.controls}>
+        {sharingParticipantName && (
+          <div className={styles.footerSharingIndicator}>
+            {sharingParticipantName}が画面共有中
+          </div>
+        )}
         <button
           onClick={toggleMic}
           className={`${styles.controlButton} ${isMuted ? styles.mutedButton : ''}`}

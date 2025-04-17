@@ -504,6 +504,9 @@ export default function CallScreen() {
       )
       if (isSharing) {
         setScreenSharingPeerId((prevSharerId) => {
+          console.log(
+            `[CallScreen] Updating screenSharingPeerId from ${prevSharerId} to ${peerId}`
+          )
           if (prevSharerId !== peerId) {
             // 自分が共有中だったら停止
             if (prevSharerId === myPeerIdRef.current) {
@@ -536,6 +539,9 @@ export default function CallScreen() {
         setScreenSharingPeerId((prevSharerId) => {
           if (prevSharerId === peerId) {
             console.log(
+              `[CallScreen] Updating screenSharingPeerId from ${prevSharerId} to null`
+            )
+            console.log(
               `CallScreen: Peer ${peerId} stopped screen sharing, clearing stream.`
             )
             // ストリームをクリア
@@ -550,6 +556,9 @@ export default function CallScreen() {
             })
             return null // 共有者を null に設定
           }
+          console.log(
+            `[CallScreen] screenSharingPeerId remains ${prevSharerId} (stop event from different peer)`
+          )
           return prevSharerId // 変更なし
         })
       }
@@ -851,6 +860,7 @@ export default function CallScreen() {
             playsInline
           />
         )}
+
         {screenSharingPeerId && !screenShareStream && (
           <div className={styles.loadingScreenShare}>
             {participants.find((p) => p.id === screenSharingPeerId)?.name ||
@@ -862,15 +872,6 @@ export default function CallScreen() {
           <div className={styles.noScreenShare}>画面共有はされていません</div>
         )}
       </div>
-
-      {/* 共有中インジケーター */}
-      {screenSharingPeerId && (
-        <div className={styles.sharingIndicator}>
-          {screenSharingPeerId === myPeerIdRef.current // ★ myPeerIdRef を使う
-            ? 'あなたが画面共有中です'
-            : `${participants.find((p) => p.id === screenSharingPeerId)?.name || '参加者'}が画面共有中です`}
-        </div>
-      )}
 
       {/* 参加者リスト */}
       <ul className={styles.participantList}>
@@ -937,6 +938,9 @@ export default function CallScreen() {
         handleMicChange={handleMicChange}
         handleSpeakerChange={handleSpeakerChange}
         leaveRoom={leaveRoom}
+        screenSharingPeerId={screenSharingPeerId}
+        myPeerId={myPeerIdRef.current} // Ref の現在の値を渡す
+        participants={participants}
       />
 
       {/* オーディオ要素用コンテナ */}
