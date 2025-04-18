@@ -1,8 +1,9 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './styles.module.css'
 import io, { Socket } from 'socket.io-client'
+import { FiClipboard, FiX } from 'react-icons/fi'
 
 // WebSocket サーバーの URL (CallScreen と同じもの)
 const WEBSOCKET_SERVER_URL =
@@ -17,6 +18,10 @@ type Props = {
 export default function RoomControls({ name, router, registerActions }: Props) {
   const [roomCodeInput, setRoomCodeInput] = useState('')
   const [isCheckingRoom, setIsCheckingRoom] = useState(false) // 確認中フラグを追加
+  const [isInputFocused, setIsInputFocused] = useState(false) // ★ フォーカス状態
+  const [isInputHovered, setIsInputHovered] = useState(false) // ★ ホバー状態
+  const inputRef = useRef<HTMLInputElement>(null) // ★ input 要素への参照
+
   // ★ 部屋を作成する処理 (useCallback でメモ化)
   const handleCreateRoom = useCallback(() => {
     if (!name.trim()) {
@@ -31,6 +36,38 @@ export default function RoomControls({ name, router, registerActions }: Props) {
     const newRoomCode = 'room-' + Math.random().toString(36).substring(2, 8)
     router.push(`/room/${newRoomCode}`)
   }, [name, router]) // ★ name と router に依存
+
+  // ★ ペースト処理
+  const handlePaste = async () => {
+    if (isCheckingRoom) return // 確認中はペーストしない
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) {
+        // ★ 貼り付ける前にトリムして最初の6文字を取得
+        const pastedText = text.trim().substring(0, 6)
+        setRoomCodeInput(pastedText)
+        inputRef.current?.focus()
+      }
+    } catch (err) {
+      console.error('クリップボードからの読み取りに失敗:', err)
+      // ユーザーにエラーを通知 (alert よりトースト通知などが望ましい場合も)
+      alert(
+        'クリップボードからの貼り付けに失敗しました。\nブラウザの設定でクリップボードへのアクセスが許可されているか確認してください。'
+      )
+    }
+  }
+
+  // ★ クリア処理
+  const handleClear = () => {
+    if (isCheckingRoom) return // 確認中はクリアしない
+    setRoomCodeInput('')
+    // クリア後に入力欄にフォーカスを戻す (任意)
+    inputRef.current?.focus()
+  }
+
+  // ★ アイコン表示条件の計算
+  const canShowPaste = !isCheckingRoom
+  const canShowClear = roomCodeInput.length > 0 && !isCheckingRoom
 
   // 部屋に参加する処理 (async に変更し、WebSocket 確認処理を追加)
   const handleJoinRoom = async () => {
@@ -161,19 +198,60 @@ export default function RoomControls({ name, router, registerActions }: Props) {
       >
         部屋を立てる
       </button>
-      <input
-        type='text'
-        className={styles.input}
-        placeholder='コードを入力'
-        value={roomCodeInput}
-        onChange={(e) => setRoomCodeInput(e.target.value)}
-        disabled={isCheckingRoom} // 確認中は無効化
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && roomCodeInput.trim() && name.trim()) {
-            handleJoinRoom()
-          }
-        }}
-      />
+      {/* --- 入力欄とアイコンのコンテナ --- */}
+      <div
+        className={styles.inputContainer} // 新しいスタイルクラス
+        onMouseEnter={() => setIsInputHovered(true)}
+        onMouseLeave={() => setIsInputHovered(false)}
+      >
+        <input
+          ref={inputRef}
+          type='text'
+          className={styles.input}
+          placeholder='コードを入力'
+          value={roomCodeInput}
+          onChange={(e) => setRoomCodeInput(e.target.value)}
+          onFocus={() => setIsInputFocused(true)}
+          onBlur={() => setIsInputFocused(false)}
+          disabled={isCheckingRoom} // 確認中は無効化
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && roomCodeInput.trim() && name.trim()) {
+              handleJoinRoom()
+            }
+          }}
+          maxLength={6}
+        />
+
+        {/* --- アイコン表示エリア --- */}
+        <div className={styles.inputIcons}>
+          {/* クリアアイコン (入力があり、確認中でない場合) */}
+          {canShowClear && (isInputFocused || isInputHovered) && (
+            <button
+              type='button' // form の submit を防ぐ
+              onClick={handleClear}
+              className={`${styles.iconButton} ${styles.clearIcon}`}
+              title='入力をクリア'
+              aria-label='入力をクリア'
+              tabIndex={-1} // Tab キーでのフォーカス対象外にする (任意)
+            >
+              <FiX />
+            </button>
+          )}
+          {/* ペーストアイコン (フォーカス or ホバー中で、確認中でない場合) */}
+          {canShowPaste && (
+            <button
+              type='button'
+              onClick={handlePaste}
+              className={`${styles.iconButton} ${styles.pasteIcon}`}
+              title='クリップボードからペースト'
+              aria-label='クリップボードからペースト'
+              tabIndex={-1} // Tab キーでのフォーカス対象外にする (任意)
+            >
+              <FiClipboard />
+            </button>
+          )}
+        </div>
+      </div>
       <button
         onClick={handleJoinRoom}
         disabled={isCheckingRoom || !roomCodeInput.trim() || !name.trim()} // 確認中や未入力時も無効化

@@ -65,6 +65,7 @@
   border: 1px solid rgba(var(--input-border-color-rgba));
   color: var(--input-text-color);
   padding: 14px 18px;
+  padding-right: 60px;
   border-radius: var(--border-radius);
   font-size: 1rem;
   width: 100%; /* 幅を 100% に */
@@ -90,4 +91,80 @@
   background-color: rgba(var(--input-bg-rgba), 0.5); /* 少し暗く */
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.inputContainer {
+  position: relative; /* アイコンを絶対配置するための基準 */
+  display: inline-block; /* 他の要素との並び方を調整 */
+  width: 100%;
+}
+
+/* アイコンを配置するコンテナ */
+.inputIcons {
+  position: absolute;
+  right: 5px; /* 入力欄の右端からの距離 */
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  /* アイコンが表示されていない時も高さを維持（任意） */
+  /* height: 100%; */
+  /* pointer-events: none; コンテナ自体はイベントを受け取らない */
+}
+
+/* アイコンボタン共通スタイル */
+.iconButton {
+  background: none;
+  border: none;
+  padding: 5px; /* クリック領域 */
+  margin: 0 2px; /* アイコン間の左右マージン */
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color-muted); /* アイコンの通常色 (薄め) */
+  font-size: 16px; /* アイコンサイズ */
+  transition: color var(--transition-duration) ease; /* opacity の transition は削除 */
+}
+
+/* コンテナがホバーされた時、または input がフォーカスされた時に表示 */
+.inputContainer:hover .iconButton,
+.input:focus + .inputIcons .iconButton {
+  opacity: 0.8; /* 表示時の透明度 */
+  pointer-events: auto; /* クリック可能に */
+}
+
+/* アイコンボタンのホバー効果 */
+.iconButton:hover {
+  opacity: 1; /* ホバー時は完全に表示 */
+  color: var(--text-color-on-dark-bg); /* ホバー時の色 */
+}
+
+/* 個別のアイコンスタイル（必要に応じて） */
+.clearIcon {
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--transition-duration) ease,
+    color var(--transition-duration) ease;
+  /* order: 2; */
+}
+
+.pasteIcon {
+  opacity: 0.8; /* ← 常に表示する場合の透明度 (0.8 や 1 などお好みで) */
+  pointer-events: auto; /* ← 常にクリック可能に */
+  /* order: 1; */ /* 表示順を制御したい場合 */
+}
+
+/* 確認中はアイコンを操作不可に（見た目も変える） */
+.input:disabled + .inputIcons .iconButton {
+  opacity: 0.4 !important; /* important で強制的に薄く */
+  color: var(--button-text-disabled) !important; /* 無効時の色 */
+  cursor: not-allowed;
+  pointer-events: none !important; /* クリック不可 */
+}
+
+/* --- ボタンのスタイル (既存) --- */
+.button {
+  /* ... */
 }
