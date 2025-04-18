@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './styles.module.css'
 import io, { Socket } from 'socket.io-client'
-import { FiClipboard, FiX } from 'react-icons/fi'
+import { FiClipboard, FiX, FiAlertCircle } from 'react-icons/fi'
 
 // WebSocket サーバーの URL (CallScreen と同じもの)
 const WEBSOCKET_SERVER_URL =
@@ -21,7 +21,10 @@ export default function RoomControls({ name, router, registerActions }: Props) {
   const [isInputFocused, setIsInputFocused] = useState(false) // ★ フォーカス状態
   const [isInputHovered, setIsInputHovered] = useState(false) // ★ ホバー状態
   const inputRef = useRef<HTMLInputElement>(null) // ★ input 要素への参照
-
+  const [roomCodeError, setRoomCodeError] = useState<string | null>(null)
+  const [errorTimeoutId, setErrorTimeoutId] = useState<NodeJS.Timeout | null>(
+    null
+  )
   // ★ 部屋を作成する処理 (useCallback でメモ化)
   const handleCreateRoom = useCallback(() => {
     if (!name.trim()) {
@@ -56,6 +59,33 @@ export default function RoomControls({ name, router, registerActions }: Props) {
       )
     }
   }
+  // ★ エラーメッセージ表示と自動非表示タイマー設定のヘルパー関数
+  const showError = (message: string, duration: number = 4000) => {
+    // 4秒後に消える設定
+    // 既存のタイマーがあればクリア
+    if (errorTimeoutId) {
+      clearTimeout(errorTimeoutId)
+    }
+    setRoomCodeError(message)
+    // 新しいタイマーを設定
+    const newTimeoutId = setTimeout(() => {
+      setRoomCodeError(null)
+      setErrorTimeoutId(null)
+    }, duration)
+    setErrorTimeoutId(newTimeoutId)
+  }
+
+  // ★ エラーとタイマーをクリアするヘルパー関数
+  const clearError = () => {
+    if (roomCodeError) {
+      // エラーがある場合のみ処理
+      if (errorTimeoutId) {
+        clearTimeout(errorTimeoutId)
+        setErrorTimeoutId(null)
+      }
+      setRoomCodeError(null)
+    }
+  }
 
   // ★ クリア処理
   const handleClear = () => {
@@ -65,12 +95,10 @@ export default function RoomControls({ name, router, registerActions }: Props) {
     inputRef.current?.focus()
   }
 
-  // ★ アイコン表示条件の計算
-  const canShowPaste = !isCheckingRoom
-  const canShowClear = roomCodeInput.length > 0 && !isCheckingRoom
-
   // 部屋に参加する処理 (async に変更し、WebSocket 確認処理を追加)
   const handleJoinRoom = async () => {
+    clearError()
+    setRoomCodeError(null) // ★ 最初にエラーをクリア
     // 名前とルームコードのチェック (変更なし)
     if (!name.trim()) {
       alert('名前を入力してください。')
@@ -78,7 +106,7 @@ export default function RoomControls({ name, router, registerActions }: Props) {
     }
     const shortCode = roomCodeInput.trim()
     if (!shortCode) {
-      alert('ルームコードを入力してください。')
+      showError('ルームコードを入力してください。')
       return
     }
 
@@ -155,7 +183,7 @@ export default function RoomControls({ name, router, registerActions }: Props) {
         // 遷移成功時は setIsCheckingRoom(false) は不要 (画面が変わるため)
       } else {
         // 部屋が存在しない場合
-        alert(`部屋コード "${shortCode}" は存在しません。`)
+        showError(`コードが間違っています`)
         setIsCheckingRoom(false) // 確認完了、ボタンを有効化
       }
     } catch (error: unknown) {
@@ -166,7 +194,7 @@ export default function RoomControls({ name, router, registerActions }: Props) {
       if (error instanceof Error) {
         errorMessage = error.message
       }
-      alert(`部屋コード "${shortCode}" の確認に失敗しました: ${errorMessage}`)
+      showError(`確認失敗: ${errorMessage}`)
       setIsCheckingRoom(false)
     } finally {
       // 確認が終わったら必ず切断
@@ -188,6 +216,19 @@ export default function RoomControls({ name, router, registerActions }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registerActions, handleCreateRoom]) // ★ registerActions と handleCreateRoom に依存
 
+  // ★ コンポーネントアンマウント時にタイマーをクリアする useEffect
+  useEffect(() => {
+    return () => {
+      if (errorTimeoutId) {
+        clearTimeout(errorTimeoutId)
+      }
+    }
+  }, [errorTimeoutId])
+
+  // アイコン表示条件 (変更なし)
+  const canShowPaste = !isCheckingRoom
+  const canShowClear = roomCodeInput.length > 0 && !isCheckingRoom
+
   return (
     <div className={styles.controls}>
       {/* disabled 属性はハンドラ内のチェックで代替できるため削除してもOK */}
@@ -207,10 +248,18 @@ export default function RoomControls({ name, router, registerActions }: Props) {
         <input
           ref={inputRef}
           type='text'
-          className={styles.input}
+          className={`${styles.input} ${
+            roomCodeError ? styles.inputError : ''
+          }`}
           placeholder='コードを入力'
           value={roomCodeInput}
-          onChange={(e) => setRoomCodeInput(e.target.value)}
+          onChange={(e) => {
+            setRoomCodeInput(e.target.value)
+            if (roomCodeError) {
+              // ★ エラーがあればクリア
+              clearError()
+            }
+          }}
           onFocus={() => setIsInputFocused(true)}
           onBlur={() => setIsInputFocused(false)}
           disabled={isCheckingRoom} // 確認中は無効化
@@ -220,7 +269,31 @@ export default function RoomControls({ name, router, registerActions }: Props) {
             }
           }}
           maxLength={6}
+          aria-invalid={!!roomCodeError}
+          aria-describedby={roomCodeError ? 'room-code-error' : undefined}
         />
+
+        {/* ★ エラーメッセージ表示エリア */}
+        <div className={styles.errorMessageContainer} aria-live='polite'>
+          {' '}
+          {/* aria-live を追加 */}
+          {roomCodeError && (
+            <>
+              {' '}
+              {/* Fragment を使用 */}
+              <FiAlertCircle
+                className={styles.errorIcon}
+                aria-hidden='true'
+              />{' '}
+              {/* アイコンを追加 */}
+              <p id='room-code-error' className={styles.errorMessage}>
+                {' '}
+                {/* id を追加 */}
+                {roomCodeError}
+              </p>
+            </>
+          )}
+        </div>
 
         {/* --- アイコン表示エリア --- */}
         <div className={styles.inputIcons}>
@@ -252,6 +325,7 @@ export default function RoomControls({ name, router, registerActions }: Props) {
           )}
         </div>
       </div>
+
       <button
         onClick={handleJoinRoom}
         disabled={isCheckingRoom || !roomCodeInput.trim() || !name.trim()} // 確認中や未入力時も無効化

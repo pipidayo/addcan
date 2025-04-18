@@ -102,14 +102,12 @@
 /* アイコンを配置するコンテナ */
 .inputIcons {
   position: absolute;
-  right: 5px; /* 入力欄の右端からの距離 */
+  right: 5px; /* 右端からの距離はそのまま */
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  /* アイコンが表示されていない時も高さを維持（任意） */
-  /* height: 100%; */
-  /* pointer-events: none; コンテナ自体はイベントを受け取らない */
+  z-index: 2; /* エラーメッセージより手前に表示 */
 }
 
 /* アイコンボタン共通スタイル */
@@ -167,4 +165,96 @@
 /* --- ボタンのスタイル (既存) --- */
 .button {
   /* ... */
+}
+
+/* --- エラー関連スタイル --- */
+/* エラー時の入力欄 */
+.inputError {
+  border-color: var(--error-color, #e53e3e);
+  /* フォーカス時の影も赤系に */
+  &:focus {
+    /* ネストして focus 時のスタイルを定義 */
+    box-shadow: 0 0 0 3px rgba(var(--error-rgb, 229, 62, 62), 0.3);
+  }
+  /* ★ 揺れアニメーションを調整 */
+  animation: shake 0.6s ease-out; /* 少し遅く、イージング変更 */
+}
+
+/* 揺れアニメーション (回数と幅を減らす) */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  } /* 揺れ幅を小さく */
+  75% {
+    transform: translateX(3px);
+  } /* 揺れ幅を小さく */
+  /* 50% のキーフレームを削除して揺れ回数を減らす */
+}
+
+/* エラーメッセージコンテナ */
+.errorMessageContainer {
+  /* ★ 絶対配置に変更 */
+  position: absolute;
+  /* ★ アイコンエリアの左側に配置 (アイコン2つ分の幅 + マージン) */
+  right: 60px; /* 例: (アイコン幅16px + padding5px*2 + margin2px*2)*2 + α = 60px くらい？ 要調整 */
+  top: 50%;
+  transform: translateY(-50%);
+  /* width: auto; */ /* 幅は内容に合わせる */
+  /* min-height は不要 */
+  display: flex;
+  align-items: center;
+  gap: 4px; /* アイコンとテキストの間隔 */
+  /* ★ 背景色などをつけて見やすくする (任意) */
+  padding: 4px 8px;
+  border-radius: var(--border-radius-small, 4px);
+  /* ★ 初期状態は非表示 */
+  opacity: 0;
+  transition: opacity var(--transition-duration) ease;
+  z-index: 1; /* アイコンより手前 (アイコンを上にしたい場合は 1 未満) */
+  pointer-events: none; /* クリックイベントを透過 */
+  max-width: 190px; /* ★ エラーメッセージの最大幅を指定 (padding-right と合わせる) */
+}
+
+/* ★ エラーメッセージが表示されるときのスタイル */
+.errorMessageContainer:has(.errorMessage) {
+  /* :has サポートブラウザ向け */
+  opacity: 1;
+}
+/* 古いブラウザ向けには、React側でエラー時にクラスを付与する方が確実 */
+/* 例: <div className={`${styles.errorMessageContainer} ${roomCodeError ? styles.visible : ''}`}> */
+
+/* ★ エラーメッセージが表示されるときのスタイル (React側でクラス付与) */
+.visible {
+  opacity: 1;
+  /* pointer-events: auto; */ /* メッセージ自体をクリック可能にする必要はなさそう */
+}
+
+/* エラーアイコン */
+.errorIcon {
+  color: var(--error-color, #e53e3e);
+  flex-shrink: 0;
+  font-size: 1em; /* メッセージと同じくらい */
+}
+
+/* エラーメッセージ */
+.errorMessage {
+  color: var(--error-color, #e53e3e);
+  font-size: 0.875rem;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap; /* 折り返さない */
+  overflow: hidden; /* はみ出した部分を隠す */
+  text-overflow: ellipsis; /* はみ出しを ... で表示 */
+}
+
+/* 確認中はアイコンを操作不可に（見た目も変える）(変更なし) */
+.input:disabled + .inputIcons .iconButton {
+  opacity: 0.4 !important;
+  color: var(--button-text-disabled) !important;
+  cursor: not-allowed;
+  pointer-events: none !important;
 }
