@@ -62,7 +62,7 @@ export default function CallControlsFooter({
   const handleCopyCode = useCallback(() => {
     if (!displayCode || isCopied) return
 
-    const textToCopy = `部屋コード: ${displayCode}` // ラベルも含めてコピー
+    const textToCopy = displayCode // ラベルも含めてコピー
     navigator.clipboard
       .writeText(textToCopy)
       .then(() => {

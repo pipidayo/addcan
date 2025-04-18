@@ -23,6 +23,7 @@ interface UsePeerConnectionOptions {
 interface UsePeerConnectionReturn {
   myPeerId: string
   localStream: MediaStream | null
+  screenStream: MediaStream | null
   callPeer: (targetId: string) => Promise<void>
   sendMuteStatus: (isMuted: boolean) => void
   switchMicrophone: (deviceId: string) => Promise<void>
@@ -43,6 +44,7 @@ export function usePeerConnection({
 }: UsePeerConnectionOptions): UsePeerConnectionReturn {
   const [myPeerId, setMyPeerId] = useState<string>('')
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null)
   // ★ PeerManager インスタンスを保持する Ref
   const peerManagerRef = useRef<PeerManager | null>(null)
   // ★ 初期化処理が進行中かを示す Ref (Strict Mode での重複実行防止)
@@ -136,6 +138,15 @@ export function usePeerConnection({
             if (peerManagerRef.current)
               onScreenShareStatusChange(peerId, isSharing)
           },
+
+          onLocalScreenStreamUpdate: (stream) => {
+            console.log(
+              '[usePeerConnection] Received local screen stream update from PeerManager',
+              stream
+            )
+            // PeerManager から screenStream (または null) を受け取ったら State を更新
+            setScreenStream(stream)
+          },
         }
 
         // ★ インスタンスの initPeer メソッドを呼び出す
@@ -182,6 +193,7 @@ export function usePeerConnection({
       initializingRef.current = false // ★ 初期化中フラグも念のため解除
       setMyPeerId('') // State もリセット
       setLocalStream(null) // State もリセット
+      setScreenStream(null) // ★ screenStream もリセット
       console.log(
         `[usePeerConnection useEffect ${effectInstanceId}] Cleanup finished.`
       )
@@ -231,30 +243,35 @@ export function usePeerConnection({
   }, []) // Ref は依存配列に不要
 
   const startScreenShare = useCallback(async () => {
-    console.log(`[usePeerConnection] Starting screen share`)
+    if (!peerManagerRef.current) throw new Error('PeerManager not initialized')
     try {
-      // ★ Ref のメソッドを呼ぶ
-      await peerManagerRef.current?.startScreenShare()
+      console.log('[usePeerConnection] Starting screen share')
+      await peerManagerRef.current.startScreenShare()
+      // PeerManager 側で onLocalScreenStreamUpdate が呼ばれる想定
     } catch (error) {
-      console.error(`[usePeerConnection] Error starting screen share:`, error)
+      console.error('[usePeerConnection] Failed to start screen share:', error)
+      setScreenStream(null) // エラー時は念のためクリア
       throw error
     }
-  }, []) // Ref は依存配列に不要
+  }, [])
 
   const stopScreenShare = useCallback(async () => {
-    console.log(`[usePeerConnection] Stopping screen share`)
+    if (!peerManagerRef.current) return
     try {
-      // ★ Ref のメソッドを呼ぶ
-      await peerManagerRef.current?.stopScreenShare()
+      console.log('[usePeerConnection] Stopping screen share')
+      await peerManagerRef.current.stopScreenShare()
+      // PeerManager 側で onLocalScreenStreamUpdate(null) が呼ばれる想定
     } catch (error) {
-      console.error(`[usePeerConnection] Error stopping screen share:`, error)
-      throw error
+      console.error('[usePeerConnection] Failed to stop screen share:', error)
+    } finally {
+      setScreenStream(null) // 停止時は確実にクリア
     }
-  }, []) // Ref は依存配列に不要
+  }, [])
 
   return {
     myPeerId,
     localStream,
+    screenStream,
     callPeer,
     sendMuteStatus,
     switchMicrophone,

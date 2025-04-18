@@ -18,6 +18,7 @@ export type InitPeerOptions = {
   onPeerDisconnect: (peerId: string) => void
   onSpeakingStatusChange?: (peerId: string, isSpeaking: boolean) => void
   onReceiveScreenShareStatus?: (peerId: string, isSharing: boolean) => void
+  onLocalScreenStreamUpdate?: (stream: MediaStream | null) => void
 }
 
 interface AudioAnalysisData {
@@ -722,7 +723,7 @@ export class PeerManager {
       screenVideoTrack = this.screenStream.getVideoTracks()[0]
       if (!screenVideoTrack)
         throw new Error('Failed to get video track from screen stream.')
-
+      this.options?.onLocalScreenStreamUpdate?.(this.screenStream)
       // 2. 共有終了時のリスナーを設定
       this.screenShareTrackEndedListener = () => {
         console.log(
@@ -813,7 +814,7 @@ export class PeerManager {
       // 開始に失敗した場合、確立した可能性のある screenMediaConnections も閉じる
       Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
       this.screenMediaConnections = {}
-
+      this.options?.onLocalScreenStreamUpdate?.(null)
       throw error // エラーを再スロー
     }
   }
@@ -849,7 +850,7 @@ export class PeerManager {
     // 2. ローカルの画面共有ストリームを停止
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = null
-
+    this.options?.onLocalScreenStreamUpdate?.(null)
     // 3. 画面共有用の接続をすべて閉じる
     console.log(
       `[PeerManager instance ${this.peer?.id}] Closing all screen share connections.`

@@ -52,6 +52,7 @@
 
 /* --- スタイル定義 --- */
 
+/* --- 全体コンテナ --- */
 .container {
   display: flex;
   flex-direction: row;
@@ -217,24 +218,28 @@ li.speakingParticipant {
 .screenShareArea {
   order: 2;
   flex: 1;
-  background: linear-gradient(
-    180deg,
-    rgba(10, 10, 20, 0.9) 0%,
-    rgba(30, 20, 50, 0.95) 100%
-  );
-  position: relative;
+  height: 100%;
+  background: linear-gradient(/* ... */);
+  position: relative; /* ローディング表示などの基準に */
   overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100%;
 }
 
-.screenVideo {
+/* ↓↓↓ ローカルプレビューのスタイルを修正 ↓↓↓ */
+.screenVideo ,
+/* 既存の受信ビデオスタイル  */
+.localScreenPreview {
   display: block;
-  max-width: 100%; /* ★ 幅は親要素に合わせる */
-  max-height: 100%; /* ★ 高さは親要素に合わせる */
-  object-fit: contain;
+  max-width: 100%; /* 親要素に合わせる */
+  max-height: 100%; /* 親要素に合わせる */
+  object-fit: contain; /* アスペクト比を維持 */
+  background-color: #000;
+
+  /* position: absolute; や width, bottom, right などは削除 */
+  /* 必要であれば枠線などを追加 */
+  /* border: 2px dashed rgba(255, 255, 255, 0.3); */
 }
 
 /* 共有がない場合やローディング中のスタイル */

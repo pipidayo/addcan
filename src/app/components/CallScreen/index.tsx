@@ -92,7 +92,7 @@ export default function CallScreen() {
   const screenVideoRef = useRef<HTMLVideoElement>(null)
   const [screenShareStream, setScreenShareStream] =
     useState<MediaStream | null>(null)
-
+  const localScreenPreviewRef = useRef<HTMLVideoElement>(null)
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('')
   // ★ selectedSpeakerId の最新値を保持する Ref を追加
   const selectedSpeakerIdRef = useRef(selectedSpeakerId)
@@ -435,6 +435,7 @@ export default function CallScreen() {
   const {
     myPeerId: myPeerIdFromHook,
     localStream,
+    screenStream: localScreenStreamFromHook,
     callPeer: callPeerHook,
     sendMuteStatus: sendMuteStatusHook,
     switchMicrophone: switchMicrophoneHook,
@@ -847,32 +848,30 @@ export default function CallScreen() {
   }, [screenShareStream]) // screenShareStream が変更されたら実行
   // screenVideoRef は Ref なので依存配列に含める必要はない
 
+  // ★★★ ローカル画面共有プレビュー用の useEffect ★★★
+  useEffect(() => {
+    // ↓↓↓ これで localScreenPreviewRef が見つかるはず ↓↓↓
+    if (
+      localScreenPreviewRef.current &&
+      isScreenSharing &&
+      localScreenStreamFromHook
+    ) {
+      console.log('CallScreen: Setting local screen stream to preview element.')
+      localScreenPreviewRef.current.srcObject = localScreenStreamFromHook
+      localScreenPreviewRef.current.muted = true
+      localScreenPreviewRef.current.play().catch((e) => {
+        console.error('Local screen preview play failed:', e)
+      })
+    } else {
+      if (localScreenPreviewRef.current) {
+        localScreenPreviewRef.current.srcObject = null
+      }
+    }
+  }, [isScreenSharing, localScreenStreamFromHook])
+
   // --- JSX レンダリング ---
   return (
     <div className={styles.container}>
-      {/* 画面共有表示エリア */}
-      <div className={styles.screenShareArea}>
-        {screenSharingPeerId && screenShareStream && (
-          <video
-            ref={screenVideoRef}
-            className={styles.screenVideo}
-            autoPlay
-            playsInline
-          />
-        )}
-
-        {screenSharingPeerId && !screenShareStream && (
-          <div className={styles.loadingScreenShare}>
-            {participants.find((p) => p.id === screenSharingPeerId)?.name ||
-              '参加者'}
-            の画面共有を読み込み中...
-          </div>
-        )}
-        {!screenSharingPeerId && (
-          <div className={styles.noScreenShare}>画面共有はされていません</div>
-        )}
-      </div>
-
       {/* 参加者リスト */}
       <ul className={styles.participantList}>
         {participants.map((p) => {
@@ -923,6 +922,58 @@ export default function CallScreen() {
           )
         })}
       </ul>
+
+      {/* 画面共有表示エリア */}
+      <div className={styles.screenShareArea}>
+        {(() => {
+          // 優先順位1: 自分が共有中ならローカルプレビューを表示
+          if (isScreenSharing && localScreenStreamFromHook) {
+            return (
+              <video
+                ref={localScreenPreviewRef}
+                className={styles.localScreenPreview}
+                autoPlay
+                playsInline
+                muted
+              />
+            )
+          }
+          // 優先順位2: 他の誰かが共有中なら受信ビデオを表示
+          else if (
+            screenSharingPeerId &&
+            screenSharingPeerId !== myPeerIdRef.current &&
+            screenShareStream
+          ) {
+            return (
+              <video
+                ref={screenVideoRef}
+                className={styles.screenVideo}
+                autoPlay
+                playsInline
+              />
+            )
+          }
+          // 優先順位3: 共有ストリーム読み込み中 (任意)
+          else if (
+            isScreenSharing ||
+            (screenSharingPeerId && screenSharingPeerId !== myPeerIdRef.current)
+          ) {
+            return (
+              <div className={styles.loadingScreenShare}>
+                画面を読み込み中...
+              </div>
+            )
+          }
+          // それ以外: 誰も共有していない
+          else {
+            return (
+              <div className={styles.noScreenShare}>
+                画面共有はされていません
+              </div>
+            )
+          }
+        })()}
+      </div>
 
       {/* フッター */}
       <CallControlsFooter
