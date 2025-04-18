@@ -52,11 +52,27 @@
   background-color: #c9302c;
 }
 
-.stopButton {
-  background-color: #f0ad4e;
+/* ★ 画面共有中 or 設定表示中のボタンスタイル */
+.activeStateButton {
+  background-color: rgba(
+    var(--accent-color-primary-rgb),
+    0.8
+  ); /* 透明感のある薄い紫 */
+  border-color: rgba(
+    var(--accent-color-primary-rgb),
+    0.9
+  ); /* ボーダーも少し紫に */
+  /* color: var(--button-text-color); アイコン色は通常と同じ白 */
 }
-.stopButton:hover {
-  background-color: #ec971f;
+/* ★ ホバー効果も少し調整 (任意) */
+.activeStateButton:hover:not(:disabled) {
+  background-color: rgba(var(--accent-color-primary-rgb), 0.4);
+  border-color: rgba(var(--accent-color-primary-rgb), 0.5);
+}
+/* ★ アクティブ効果も少し調整 (任意) */
+.activeStateButton:active:not(:disabled) {
+  background-color: rgba(var(--accent-color-primary-rgb), 0.5);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
 .leaveButton {
@@ -69,51 +85,81 @@
 /* デバイス設定ポップアップ */
 .deviceSettingsPopup {
   position: absolute;
-  bottom: 70px;
+  bottom: calc(100% + 10px); /* フッターの上 10px */
   left: 50%;
   transform: translateX(-50%);
-  background-color: #3a3d44;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+  /* ★ 背景色、ぼかし、ボーダー、影を globals.css の変数で設定 */
+  background-color: rgba(var(--background-rgb), 0.8); /* 例: 背景色変数 */
+  backdrop-filter: blur(var(--blur-intensity));
+  -webkit-backdrop-filter: blur(var(--blur-intensity));
+  border: 1px solid rgba(var(--border-color-subtle-rgb), 0.2); /* 細いボーダー */
+  box-shadow: var(--shadow-lg); /* より大きな影 */
+  padding: 20px; /* パディングを少し広げる */
+  border-radius: var(--border-radius); /* 角丸を適用 */
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-width: 250px;
+  gap: 15px; /* 要素間のギャップを調整 */
+  min-width: 300px; /* 幅を少し広げる */
   z-index: 1001;
 }
 
 .deviceSelector {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px; /* ラベルとセレクトボックスの間隔 */
 }
 
 .deviceSelector label {
-  color: #eee;
-  min-width: 60px;
+  color: var(--text-color-muted);
+  font-size: 0.9rem;
+  width: 90px; /* 幅を固定 */
+  text-align: right;
+  flex-shrink: 0;
 }
 
+/* ★ セレクトボックスのスタイルを大幅に変更 */
 .deviceSelector select {
+  /* === 基本スタイル === */
+  appearance: none; /* ブラウザ標準スタイルを無効化 */
+  -webkit-appearance: none;
+  -moz-appearance: none;
   flex-grow: 1;
-  padding: 5px;
-  border-radius: 4px;
-  border: 1px solid #555;
-  background-color: #fff;
+  padding: 10px 36px 10px 12px; /* 右側に矢印用のスペースを確保 */
+  border-radius: var(--border-radius-small); /* 小さめの角丸 */
+  /* ★ 背景色、文字色、ボーダー色を globals.css の変数で設定 */
+  background-color: #ffffff;
+  color: var(--text-color-on-light-bg, #111827);
+  border: 1px solid rgba(var(--input-border-color-rgba));
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-duration) ease,
+    box-shadow var(--transition-duration) ease;
+
+  /* === カスタム矢印 === */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); /* 下向き矢印 SVG (色は --text-color-muted に合わせて #9ca3af) */
+  background-repeat: no-repeat;
+  background-position: right 10px center; /* 右端から10px、垂直中央 */
+  background-size: 16px 16px; /* 矢印のサイズ */
 }
 
-.closeButton {
-  margin-top: 10px;
-  padding: 5px 10px;
-  background-color: #6c757d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  align-self: flex-end;
+/* ★ セレクトボックスのホバー時 */
+.deviceSelector select:hover {
+  border-color: rgba(var(--input-border-color-hover-rgba));
 }
-.closeButton:hover {
-  background-color: #5a6268;
+
+/* ★ セレクトボックスのフォーカス時 */
+.deviceSelector select:focus {
+  outline: none;
+  border-color: rgba(var(--input-border-color-focus-rgba));
+  box-shadow: 0 0 0 3px rgba(var(--accent-color-primary-rgb), 0.3); /* フォーカスリング */
+}
+
+/* ★ セレクトボックスが無効な場合 */
+.deviceSelector select:disabled {
+  background-color: rgba(var(--input-bg-rgba), 0.5);
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .footerSharingIndicator {

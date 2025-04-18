@@ -1,7 +1,17 @@
 // src/app/components/CallControlsFooter/index.tsx
-import React, { useMemo, useCallback, useState } from 'react'
+import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react'
 import styles from './styles.module.css'
 import type { Participant } from '../CallScreen'
+// ★ react-icons からアイコンをインポート (FiCopy, FiCheck はコピー吹き出し用)
+import {
+  FiMic,
+  FiMicOff,
+  FiMonitor,
+  FiSettings,
+  FiPhone,
+  FiCheck, // ← コピー吹き出しには使うので残す
+  FiVolume2,
+} from 'react-icons/fi'
 
 // Props の型定義
 interface CallControlsFooterProps {
@@ -46,13 +56,10 @@ export default function CallControlsFooter({
   handleScreenVolumeChange,
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
-  const [isCopied, setIsCopied] = useState(false) // コピー完了状態
+  const [isCopied, setIsCopied] = useState(false)
   const displayCode = useMemo(() => roomCode?.replace('room-', ''), [roomCode])
-
-  console.log('[CallControlsFooter] Received Props:', {
-    screenSharingPeerId,
-    myPeerId,
-  })
+  const settingsPopupRef = useRef<HTMLDivElement>(null) // ★ ポップアップ要素への参照
+  const settingsButtonRef = useRef<HTMLButtonElement>(null)
 
   const sharingParticipantName = useMemo(() => {
     if (!screenSharingPeerId) return null
@@ -62,19 +69,19 @@ export default function CallControlsFooter({
     )
   }, [screenSharingPeerId, myPeerId, participants])
 
-  // ★ コピー処理 (波紋ロジックは削除)
+  // コピー処理
   const handleCopyCode = useCallback(() => {
     if (!displayCode || isCopied) return
 
-    const textToCopy = displayCode // ラベルも含めてコピー
+    const textToCopy = displayCode
     navigator.clipboard
       .writeText(textToCopy)
       .then(() => {
         console.log('Text copied to clipboard:', textToCopy)
-        setIsCopied(true) // 吹き出し表示開始
+        setIsCopied(true)
         setTimeout(() => {
-          setIsCopied(false) // 吹き出し非表示
-        }, 1500) // 吹き出し表示時間
+          setIsCopied(false)
+        }, 1500)
       })
       .catch((err) => {
         console.error('Failed to copy text:', err)
@@ -82,12 +89,41 @@ export default function CallControlsFooter({
       })
   }, [displayCode, isCopied])
 
+  // ★ ポップアップ外クリックで閉じる useEffect
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // ★ 設定ボタン自体、またはポップアップ内がクリックされた場合は何もしない
+      if (
+        (settingsButtonRef.current &&
+          settingsButtonRef.current.contains(event.target as Node)) ||
+        (settingsPopupRef.current &&
+          settingsPopupRef.current.contains(event.target as Node))
+      ) {
+        return
+      }
+      // ★ 上記以外（ポップアップの外側）がクリックされたら閉じる
+      setShowDeviceSettings(false)
+    }
+
+    // ★ ポップアップが表示されているときだけイベントリスナーを追加
+    if (showDeviceSettings) {
+      document.addEventListener('mousedown', handleClickOutside)
+    } else {
+      // ★ ポップアップが非表示になったらリスナーを削除 (クリーンアップでも行うが念のため)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+
+    // クリーンアップ関数
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showDeviceSettings]) // showDeviceSettings が変わるたびに実行
+
   return (
     <div className={styles.footerContainer}>
-      {/* デバイス設定エリア */}
+      {/* デバイス設定ポップアップ */}
       {showDeviceSettings && (
-        <div className={styles.deviceSettingsPopup}>
-          {/* ... (中身は変更なし) ... */}
+        <div ref={settingsPopupRef} className={styles.deviceSettingsPopup}>
           <div className={styles.deviceSelector}>
             <label htmlFor='mic-select-footer'>マイク:</label>
             <select
@@ -118,44 +154,75 @@ export default function CallControlsFooter({
               ))}
             </select>
           </div>
-          <button
-            onClick={() => setShowDeviceSettings(false)}
-            className={styles.closeButton}
-          >
-            閉じる
-          </button>
         </div>
       )}
 
       {/* メインコントロール */}
       <div className={styles.controls}>
-        {/* ルームコード表示＆コピー */}
+        {/* ルームコード表示＆コピー (元のシンプルな形に戻す) */}
         {displayCode && (
-          // ↓↓↓ 位置決めの基準となるコンテナ ↓↓↓
           <div className={styles.roomCodeContainerFooter}>
             <span className={styles.roomLabelFooter}>部屋コード:</span>
             <div
-              className={styles.roomCodeFooter} // ★ .copied クラスは不要
+              className={styles.roomCodeFooter}
               onClick={handleCopyCode}
               title={'クリックしてルームコードをコピー'}
             >
-              <span className={styles.roomCodeValueFooter}>
-                {/* 表示はずっとコード本体 */}
-                {displayCode}
-              </span>
+              <span className={styles.roomCodeValueFooter}>{displayCode}</span>
+              {/* ★ FiCopy アイコンは削除 */}
               <div
                 className={`${styles.copyTooltip} ${isCopied ? styles.visible : ''}`}
               >
+                <FiCheck style={{ marginRight: '4px' }} />
                 コピー完了！
               </div>
             </div>
           </div>
         )}
 
-        {/* 誰かが画面共有中 (自分以外でもOK) の場合に表示 */}
-        {screenSharingPeerId && (
+        {/* 画面共有インジケーター */}
+        {sharingParticipantName && (
+          <div className={styles.footerSharingIndicator}>
+            {sharingParticipantName}が画面共有中
+          </div>
+        )}
+
+        {/* 各種コントロールボタン (アイコン化は維持) */}
+        <button
+          onClick={toggleMic}
+          className={`${styles.controlButton} ${isMuted ? styles.mutedButton : ''}`}
+          disabled={!localStream}
+          title={isMuted ? 'ミュート解除' : 'ミュート'}
+        >
+          {isMuted ? <FiMicOff /> : <FiMic />}
+        </button>
+        <button
+          onClick={toggleScreenShare}
+          className={`${styles.controlButton} ${isScreenSharing ? styles.activeStateButton : ''}`}
+          title={isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
+        >
+          <FiMonitor />
+        </button>
+        <button
+          ref={settingsButtonRef}
+          onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+          className={`${styles.controlButton} ${showDeviceSettings ? styles.activeStateButton : ''}`}
+          title='デバイス設定'
+        >
+          <FiSettings />
+        </button>
+        <button
+          onClick={leaveRoom}
+          className={`${styles.controlButton} ${styles.leaveButton}`}
+          title='退出'
+        >
+          <FiPhone />
+        </button>
+
+        {/* 画面共有ボリューム */}
+        {screenSharingPeerId && screenSharingPeerId !== myPeerId && (
           <div className={styles.screenVolumeControl}>
-            <span className={styles.volumeIcon}>🔊</span> {/* アイコン例 */}
+            <FiVolume2 className={styles.volumeIcon} />
             <input
               type='range'
               min='0'
@@ -170,44 +237,6 @@ export default function CallControlsFooter({
             />
           </div>
         )}
-
-        {/* 画面共有インジケーター */}
-        {sharingParticipantName && (
-          <div className={styles.footerSharingIndicator}>
-            {sharingParticipantName}が画面共有中
-          </div>
-        )}
-
-        {/* 各種コントロールボタン */}
-        <button
-          onClick={toggleMic}
-          className={`${styles.controlButton} ${isMuted ? styles.mutedButton : ''}`}
-          disabled={!localStream}
-          title={isMuted ? 'ミュート解除' : 'ミュート'}
-        >
-          {isMuted ? '🔇' : '🎤'}
-        </button>
-        <button
-          onClick={toggleScreenShare}
-          className={`${styles.controlButton} ${isScreenSharing ? styles.stopButton : ''}`}
-          title={isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
-        >
-          🖥️
-        </button>
-        <button
-          onClick={() => setShowDeviceSettings(!showDeviceSettings)}
-          className={styles.controlButton}
-          title='デバイス設定'
-        >
-          ⚙️
-        </button>
-        <button
-          onClick={leaveRoom}
-          className={`${styles.controlButton} ${styles.leaveButton}`}
-          title='退出'
-        >
-          📞
-        </button>
       </div>
     </div>
   )

@@ -7,7 +7,7 @@
   --text-color-on-dark-bg: #ffffff;
   --text-color-muted: #9ca3af;
   --accent-color-self: #5b21b6; /* 暗めの紫 */
-  --accent-color-speaking: #059669;
+
   --icon-color-muted: #dc2626;
 
   /* ボタン色 */
@@ -144,11 +144,11 @@ li.speakingParticipant {
   /* ボーダーの色を変える */
   /* border-color: rgba(var(--accent-color-speaking), 0.3); */
 
-  box-shadow: 0 0 10px 3px var(--accent-color-speaking);
-  border-color: var(--accent-color-speaking); /* 変数を直接指定 */
+  box-shadow: 0 0 10px 3px rgba(var(--accent-color-primary-rgb), 0.7);
+  border-color: rgba(var(--accent-color-primary-rgb), 0.8);
 }
 .speakingParticipant .muteIcon:not(.muted) {
-  color: var(--accent-color-speaking);
+  color: rgba(var(--accent-color-primary-rgb), 1);
 }
 /* --- ボタン共通スタイル (ボーダー色調整) --- */
 .button {
