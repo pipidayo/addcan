@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import styles from './styles.module.css'
 import io, { Socket } from 'socket.io-client'
@@ -11,17 +11,17 @@ const WEBSOCKET_SERVER_URL =
 type Props = {
   name: string // Home から name を受け取る
   router: ReturnType<typeof useRouter>
+  registerActions: (actions: { createRoom?: () => void }) => void
 }
 
-export default function RoomControls({ name, router }: Props) {
+export default function RoomControls({ name, router, registerActions }: Props) {
   const [roomCodeInput, setRoomCodeInput] = useState('')
   const [isCheckingRoom, setIsCheckingRoom] = useState(false) // 確認中フラグを追加
-  // 部屋を作成する処理
-  const handleCreateRoom = () => {
-    // ★ 名前が入力されているかチェック
+  // ★ 部屋を作成する処理 (useCallback でメモ化)
+  const handleCreateRoom = useCallback(() => {
     if (!name.trim()) {
       alert('名前を入力してください。')
-      return // 名前がなければ処理を中断
+      return
     }
     // ★ localStorage に名前を保存
     localStorage.setItem('my_name', name)
@@ -30,7 +30,7 @@ export default function RoomControls({ name, router }: Props) {
     // 新しいルームコードを生成して画面遷移
     const newRoomCode = 'room-' + Math.random().toString(36).substring(2, 8)
     router.push(`/room/${newRoomCode}`)
-  }
+  }, [name, router]) // ★ name と router に依存
 
   // 部屋に参加する処理 (async に変更し、WebSocket 確認処理を追加)
   const handleJoinRoom = async () => {
@@ -140,6 +140,17 @@ export default function RoomControls({ name, router }: Props) {
     }
   }
 
+  // ★ useEffect を使って親コンポーネントに関数を登録
+  useEffect(() => {
+    // createRoom アクションとして handleCreateRoom を登録
+    registerActions({ createRoom: handleCreateRoom })
+    // クリーンアップ: コンポーネントがアンマウントされたら登録解除 (任意)
+    return () => {
+      registerActions({})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerActions, handleCreateRoom]) // ★ registerActions と handleCreateRoom に依存
+
   return (
     <div className={styles.controls}>
       {/* disabled 属性はハンドラ内のチェックで代替できるため削除してもOK */}
@@ -157,6 +168,11 @@ export default function RoomControls({ name, router }: Props) {
         value={roomCodeInput}
         onChange={(e) => setRoomCodeInput(e.target.value)}
         disabled={isCheckingRoom} // 確認中は無効化
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && roomCodeInput.trim() && name.trim()) {
+            handleJoinRoom()
+          }
+        }}
       />
       <button
         onClick={handleJoinRoom}
