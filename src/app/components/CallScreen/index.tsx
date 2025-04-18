@@ -99,6 +99,7 @@ export default function CallScreen() {
   useEffect(() => {
     selectedSpeakerIdRef.current = selectedSpeakerId
   }, [selectedSpeakerId]) // selectedSpeakerId が更新されたら Ref も更新
+  const [screenVolume, setScreenVolume] = useState(0.7) // 初期音量 (0.0 ~ 1.0)
 
   // --- ここまで State と Ref 定義 ---
 
@@ -411,6 +412,15 @@ export default function CallScreen() {
     router.push('/') // ホーム画面などに戻る
   }, [router])
 
+  const handleScreenVolumeChange = useCallback((volume: number) => {
+    // state を更新 (すぐに反映させるため)
+    setScreenVolume(volume)
+    // 実際のビデオ要素の音量を変更 (useEffect でも行うが、即時反映のためここでも)
+    if (screenVideoRef.current) {
+      screenVideoRef.current.volume = volume
+    }
+  }, []) // 依存配列は空でOK
+
   // --- usePeerConnection フックの呼び出し ---
   // ★ peerCallbacks の useMemo の依存配列も更新
   const peerCallbacks = useMemo(
@@ -450,6 +460,7 @@ export default function CallScreen() {
   })
 
   // --- フックの結果を使用するコールバック関数 ---
+
   // handleMicChange
   const handleMicChange = useCallback(
     async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -848,6 +859,27 @@ export default function CallScreen() {
   }, [screenShareStream]) // screenShareStream が変更されたら実行
   // screenVideoRef は Ref なので依存配列に含める必要はない
 
+  // ★★★ 受信画面共有ストリームを video 要素に設定する useEffect を修正 ★★★
+  useEffect(() => {
+    if (screenVideoRef.current && screenShareStream) {
+      console.log('CallScreen: Setting screen share stream to video element.')
+      screenVideoRef.current.srcObject = screenShareStream
+      // ↓↓↓ 音量を state から設定 & ミュート解除 ↓↓↓
+      screenVideoRef.current.volume = screenVolume
+      screenVideoRef.current.muted = false // ★ ミュート解除
+      // ↑↑↑ 音量を state から設定 & ミュート解除 ↑↑↑
+      screenVideoRef.current.play().catch((e) => {
+        console.error('Screen share video play failed:', e)
+      })
+    } else {
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = null
+      }
+    }
+  }, [screenShareStream, screenVolume]) // ★ screenVolume も依存配列に追加
+
+  // ★★★ ローカル画面共有プレビュー用の useEffect (変更なし) ★★★
+
   // ★★★ ローカル画面共有プレビュー用の useEffect ★★★
   useEffect(() => {
     // ↓↓↓ これで localScreenPreviewRef が見つかるはず ↓↓↓
@@ -993,6 +1025,8 @@ export default function CallScreen() {
         myPeerId={myPeerIdRef.current} // Ref の現在の値を渡す
         participants={participants}
         roomCode={roomCode}
+        screenVolume={screenVolume}
+        handleScreenVolumeChange={handleScreenVolumeChange}
       />
 
       {/* オーディオ要素用コンテナ */}

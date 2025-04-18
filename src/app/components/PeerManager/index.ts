@@ -695,34 +695,37 @@ export class PeerManager {
   }
 
   public async startScreenShare() {
-    // ★ ログ出力用に peerId を安全に取得
-    const peerIdForLog = this.peer?.id ?? 'N/A'
-    console.log(
-      `[PeerManager instance ${this.peer?.id}] Attempting to start screen share.`
-    )
     if (this.screenStream) {
-      console.warn(
-        `[PeerManager instance ${this.peer?.id}] Screen sharing is already active.`
-      )
-      return // 既に共有中の場合は何もしない
-    }
-    if (!this.peer) {
-      console.error(
-        `[PeerManager instance ${peerIdForLog}] Peer is not initialized. Cannot start screen share.`
-      )
+      console.warn('[PeerManager] Screen share already active.')
       return
     }
+    console.log('[PeerManager] Starting screen share...')
+    let screenVideoTrack: MediaStreamTrack | null = null
+    let screenAudioTrack: MediaStreamTrack | null = null // ★ 音声トラック用変数
 
-    let screenVideoTrack: MediaStreamTrack | undefined
     try {
-      // 1. 画面共有ストリームを取得
+      // ↓↓↓ audio: true を追加 ↓↓↓
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: false, // 通常は音声を含めない
+        audio: true, // ★ 音声も取得する
       })
+      // ↑↑↑ audio: true を追加 ↑↑↑
+
       screenVideoTrack = this.screenStream.getVideoTracks()[0]
-      if (!screenVideoTrack)
-        throw new Error('Failed to get video track from screen stream.')
+      screenAudioTrack = this.screenStream.getAudioTracks()[0] // ★ 音声トラックを取得
+
+      if (!screenVideoTrack) {
+        throw new Error('No video track found in screen share stream.')
+      }
+      console.log('[PeerManager] Screen share stream obtained.')
+      if (screenAudioTrack) {
+        console.log('[PeerManager] Screen share stream includes audio track!')
+      } else {
+        console.log(
+          '[PeerManager] Screen share stream does NOT include audio track.'
+        )
+      }
+
       this.options?.onLocalScreenStreamUpdate?.(this.screenStream)
       // 2. 共有終了時のリスナーを設定
       this.screenShareTrackEndedListener = () => {
@@ -815,6 +818,7 @@ export class PeerManager {
       Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
       this.screenMediaConnections = {}
       this.options?.onLocalScreenStreamUpdate?.(null)
+
       throw error // エラーを再スロー
     }
   }

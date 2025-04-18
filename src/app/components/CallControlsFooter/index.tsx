@@ -21,6 +21,8 @@ interface CallControlsFooterProps {
   participants: Participant[]
   screenSharingPeerId: string | null
   roomCode: string | undefined
+  screenVolume: number
+  handleScreenVolumeChange: (volume: number) => void
 }
 
 export default function CallControlsFooter({
@@ -40,6 +42,8 @@ export default function CallControlsFooter({
   myPeerId,
   participants,
   roomCode,
+  screenVolume,
+  handleScreenVolumeChange,
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [isCopied, setIsCopied] = useState(false) // コピー完了状態
@@ -145,6 +149,25 @@ export default function CallControlsFooter({
                 コピー完了！
               </div>
             </div>
+          </div>
+        )}
+
+        {/* 誰かが画面共有中 (自分以外でもOK) の場合に表示 */}
+        {screenSharingPeerId && (
+          <div className={styles.screenVolumeControl}>
+            <span className={styles.volumeIcon}>🔊</span> {/* アイコン例 */}
+            <input
+              type='range'
+              min='0'
+              max='1'
+              step='0.01'
+              value={screenVolume}
+              onChange={(e) =>
+                handleScreenVolumeChange(parseFloat(e.target.value))
+              }
+              className={styles.screenVolumeSlider}
+              title={`画面共有の音量: ${Math.round(screenVolume * 100)}%`}
+            />
           </div>
         )}
 
