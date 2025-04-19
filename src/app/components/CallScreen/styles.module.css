@@ -6,7 +6,9 @@
   --text-color-on-light-bg: #111827;
   --text-color-on-dark-bg: #ffffff;
   --text-color-muted: #9ca3af;
-  --accent-color-self: #5b21b6; /* 暗めの紫 */
+  --accent-color-primary-rgb: 91, 33, 182; /* 紫 RGB (#5b21b6) */
+  --accent-color-self: #5b21b6; /* selfParticipant 用 (現在は未使用) */
+  --accent-color-speaking-rgb: 14, 165, 233; /* 水色 RGB (例: sky-500) */
 
   --icon-color-muted: #dc2626;
 
@@ -21,32 +23,22 @@
   --button-text-disabled: #9ca3af;
 
   /* 背景 */
-  --bg-self-rgba: 91, 33, 182, 0.5;
-  --bg-other-rgba: 255, 255, 255, 0.45;
+  /* --bg-self-rgba, --bg-other-rgba は未使用 */
 
-  /* ★ ボーダー色 (より繊細に) */
+  /* ボーダー色 */
   --border-color-base: rgba(0, 0, 0, 0.05);
-  --border-color-self: rgba(
-    var(--accent-color-self),
-    0.5
-  ); /* ★ 紫系の薄いボーダー */
-  --border-color-button: rgba(
-    var(--accent-color-self),
-    0.3
-  ); /* ★ ボタン用の少し濃い紫系ボーダー */
-  --border-color-button-hover: rgba(var(--accent-color-self), 0.4);
-  --border-color-disabled: rgba(
-    209,
-    213,
-    219,
-    0.5
-  ); /* ★ 無効時のグレーボーダー */
+  /* --border-color-self は未使用 */
+  --border-color-button: rgba(var(--accent-color-primary-rgb), 0.3);
+  --border-color-button-hover: rgba(var(--accent-color-primary-rgb), 0.4);
+  --border-color-disabled: rgba(209, 213, 219, 0.5);
 
   /* その他 */
   --blur-intensity: 14px;
-  --border-radius: 14px;
-  --shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  /* ★ 角丸をさらに小さく */
+  --border-radius: 8px;
+  /* ★ デフォルトの影をより繊細に (または削除) */
+  --shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* 例: より軽い影 */
+  /* --shadow: none; */ /* または影なし */
   --transition-duration: 0.2s;
 }
 
@@ -74,47 +66,56 @@
   border-right: 1px solid #444; /* 区切り線の色も調整 */
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px; /* ボックス間の間隔を少し詰める */
   list-style: none;
 }
 
 .participantItem {
-  /* ↓↓↓ 暗い背景に合わせた調整 (例) ↓↓↓ */
-  background-color: rgba(255, 255, 255, 0.05); /* 少し明るい背景 */
-  color: var(--text-color-on-dark-bg); /* 白い文字 */
-  border: 1px solid rgba(255, 255, 255, 0.1); /* 明るいボーダー */
-  /* ↑↑↑ 暗い背景に合わせた調整 (例) ↑↑↑ */
-
+  /* ★ 背景色を非常に暗く、わずかに透明に */
+  background-color: rgba(0, 0, 0, 0.2);
+  color: var(--text-color-on-dark-bg);
+  /* border はなし */
   backdrop-filter: blur(var(--blur-intensity));
   -webkit-backdrop-filter: blur(var(--blur-intensity));
-  padding: 16px 22px;
-  border-radius: var(--border-radius);
-  box-shadow: var(--shadow);
+  padding: 14px 20px; /* パディングを少し調整 */
+  border-radius: var(--border-radius); /* :root の値を参照 */
+  /* ★ デフォルトの影を削除 (または :root で調整) */
+  /* box-shadow: var(--shadow); */
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition:
-    transform var(--transition-duration) ease,
+  flex-direction: column;
+  gap: 8px; /* 名前エリアと音量バーの間隔を少し詰める */
+  transition: /* transform は不要に */
     box-shadow var(--transition-duration) ease,
-    background-color var(--transition-duration) ease,
-    border-color var(--transition-duration) ease;
+    /* 発言時の影のため */ background-color var(--transition-duration) ease; /* ホバー効果のため */
+}
+
+/* ★ ホバー時の背景色を少し明るく (または薄紫に) */
+.participantItem:hover {
+  background-color: rgba(var(--accent-color-primary-rgb), 0.1); /* 例: 薄紫 */
+  /* background-color: rgba(0, 0, 0, 0.3); */ /* 例: 少し濃い黒 */
+}
+
+.participantInfo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .selfParticipant {
-  background-color: rgba(
-    var(--bg-self-rgba)
-  ); /* これは変数なのでそのままでも良いかも */
-  color: var(--text-color-on-dark-bg);
-  border-color: var(--border-color-self); /* 変数を使う */
+  /* .participantItem のスタイルを継承 */
 }
 
 .participantName {
-  flex-grow: 1;
   margin-right: 12px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* ★ 通常時の色を少し透過した白に */
+  color: rgba(255, 255, 255, 0.6);
+  /* ★ 色の変化を滑らかにする transition を追加 */
+  transition: color var(--transition-duration) ease;
 }
 
 .muteIcon {
@@ -124,6 +125,53 @@
   transition:
     color var(--transition-duration) ease,
     transform var(--transition-duration) ease;
+}
+
+/* ★ 音量バーのスタイル */
+.volumeSlider {
+  width: 100%;
+  /* ★ 高さを少し戻す */
+  height: 6px;
+  cursor: pointer;
+  appearance: none;
+  /* ★ 背景を少し暗く */
+  background: rgba(255, 255, 255, 0.1);
+  /* ★ 角丸をトラックの高さに合わせる */
+  border-radius: 3px;
+  outline: none;
+  transition: opacity 0.2s;
+  /* ★ 内側の影を削除 */
+  /* box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); */
+}
+
+/* ★ スライダーのつまみ (Chrome, Edge, Safari) */
+.volumeSlider::-webkit-slider-thumb {
+  appearance: none;
+  /* ★ サイズをトラックに合わせるか、少しだけ大きく */
+  width: 6px;
+  height: 14px; /* 高さを少し出す */
+  /* ★ 背景色を控えめな色に */
+  background: rgba(255, 255, 255, 0.4); /* 例: 半透明の白 */
+  /* background: rgba(var(--accent-color-primary-rgb), 0.3); */ /* 例: 非常に薄い紫 */
+  /* ★ 角丸を調整 */
+  border-radius: 2px;
+  cursor: pointer;
+  /* ★ ボーダーと影を削除 */
+  /* border: 2px solid var(--text-color-on-dark-bg); */
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
+  /* transition: transform 0.1s ease; */ /* ホバー効果削除 */
+}
+
+/* ★ スライダーのつまみ (Firefox) */
+.volumeSlider::-moz-range-thumb {
+  width: 6px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  cursor: pointer;
+  border: none; /* Firefox はボーダーをリセット */
+  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
+  /* transition: transform 0.1s ease; */
 }
 
 .selfParticipant .muteIcon {
@@ -139,79 +187,17 @@
 }
 
 li.speakingParticipant {
-  /* 影をつける
-  box-shadow: 0 0 10px 3px rgba(var(--accent-color-speaking), 0.7);
-  /* ボーダーの色を変える */
-  /* border-color: rgba(var(--accent-color-speaking), 0.3); */
-
-  box-shadow: 0 0 10px 3px rgba(var(--accent-color-primary-rgb), 0.7);
-  border-color: rgba(var(--accent-color-primary-rgb), 0.8);
+  /* ★ 水色の影に変更 */
+  box-shadow: 0 0 10px 3px rgba(var(--accent-color-speaking-rgb), 0.7);
 }
+
+/* ★ 発言中の参加者の名前の色を白にする */
+.speakingParticipant .participantName {
+  color: var(--text-color-on-dark-bg); /* 完全な白 */
+}
+
 .speakingParticipant .muteIcon:not(.muted) {
-  color: rgba(var(--accent-color-primary-rgb), 1);
-}
-/* --- ボタン共通スタイル (ボーダー色調整) --- */
-.button {
-  background-color: rgba(var(--button-bg-rgba));
-  backdrop-filter: blur(var(--blur-intensity));
-  -webkit-backdrop-filter: blur(var(--blur-intensity));
-  color: var(--button-text-color);
-  border: 1px solid var(--border-color-button); /* ★ ボタン用ボーダー色適用 */
-  padding: 12px 20px;
-  border-radius: var(--border-radius);
-  cursor: pointer;
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin: 8px 5px;
-  transition: all var(--transition-duration) ease;
-  box-shadow: var(--shadow);
-}
-
-.button:hover:not(:disabled) {
-  background-color: rgba(var(--button-bg-hover-rgba));
-  border-color: var(--border-color-button-hover); /* ★ ホバー時ボーダー色適用 */
-  box-shadow:
-    0 7px 10px -3px rgba(0, 0, 0, 0.08),
-    0 4px 6px -4px rgba(0, 0, 0, 0.06);
-  transform: translateY(-2px);
-}
-
-.button:active:not(:disabled) {
-  background-color: rgba(var(--button-bg-active-rgba));
-  border-color: var(
-    --border-color-button
-  ); /* アクティブ時は通常ボーダーに戻すなど */
-  transform: translateY(0px);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.button:disabled {
-  background-color: rgba(var(--button-bg-disabled-rgba));
-  backdrop-filter: blur(var(--blur-intensity));
-  -webkit-backdrop-filter: blur(var(--blur-intensity));
-  color: var(--button-text-disabled);
-  border: 1px solid var(--border-color-disabled); /* ★ 無効時ボーダー色適用 */
-  cursor: not-allowed;
-  box-shadow: none;
-  transform: none;
-}
-
-.deviceSelectors {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
-  align-items: center;
-}
-
-.deviceSelectors label {
-  margin-right: 8px;
-}
-
-.deviceSelectors select {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  min-width: 150px;
+  color: rgba(var(--accent-color-speaking-rgb), 1);
 }
 
 /* ★★★ 画面共有エリアのスタイル ★★★ */
@@ -227,47 +213,25 @@ li.speakingParticipant {
   align-items: center;
 }
 
-/* ↓↓↓ ローカルプレビューのスタイルを修正 ↓↓↓ */
-.screenVideo ,
-/* 既存の受信ビデオスタイル  */
+.screenVideo,
 .localScreenPreview {
   display: block;
-  max-width: 100%; /* 親要素に合わせる */
-  max-height: 100%; /* 親要素に合わせる */
-  object-fit: contain; /* アスペクト比を維持 */
-  background-color: #000;
-
-  /* position: absolute; や width, bottom, right などは削除 */
-  /* 必要であれば枠線などを追加 */
-  /* border: 2px dashed rgba(255, 255, 255, 0.3); */
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background-color: #000; /* 念のため */
 }
 
 /* 共有がない場合やローディング中のスタイル */
 .loadingScreenShare,
 .noScreenShare {
-  /* position: absolute;
-  top: 0;
-  left: 0; */ /* display:flex を使っているので不要 */
   width: 100%;
   height: 100%;
   display: flex;
   justify-content: center;
   align-items: center;
-  color: #ccc;
+  color: var(--text-color-muted); /* 文字色を調整 */
   font-size: 1.1em;
   text-align: center;
   padding: 20px;
-}
-
-.sharingIndicator {
-  margin-top: 5px; /* screenShareArea との間隔を少し詰める */
-  margin-bottom: 15px; /* 参加者リストとの間隔 */
-  padding: 8px 15px;
-  background-color: rgba(76, 175, 80, 0.8); /* 少し透明度のある緑 */
-  color: white;
-  border-radius: 4px;
-  text-align: center;
-  font-weight: 500; /* 少し細めに */
-  display: inline-block; /* 幅を内容に合わせる */
-  max-width: 90%; /* 長すぎる場合に備える */
 }

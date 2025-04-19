@@ -2,15 +2,13 @@
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react'
 import styles from './styles.module.css'
 import type { Participant } from '../CallScreen'
-// ★ react-icons からアイコンをインポート (FiCopy, FiCheck はコピー吹き出し用)
 import {
   FiMic,
   FiMicOff,
   FiMonitor,
   FiSettings,
   FiPhone,
-  FiCheck, // ← コピー吹き出しには使うので残す
-  FiVolume2,
+  FiCheck,
 } from 'react-icons/fi'
 
 // Props の型定義
@@ -58,7 +56,7 @@ export default function CallControlsFooter({
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
   const displayCode = useMemo(() => roomCode?.replace('room-', ''), [roomCode])
-  const settingsPopupRef = useRef<HTMLDivElement>(null) // ★ ポップアップ要素への参照
+  const settingsPopupRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
 
   const sharingParticipantName = useMemo(() => {
@@ -89,10 +87,9 @@ export default function CallControlsFooter({
       })
   }, [displayCode, isCopied])
 
-  // ★ ポップアップ外クリックで閉じる useEffect
+  // ポップアップ外クリックで閉じる useEffect
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // ★ 設定ボタン自体、またはポップアップ内がクリックされた場合は何もしない
       if (
         (settingsButtonRef.current &&
           settingsButtonRef.current.contains(event.target as Node)) ||
@@ -101,23 +98,19 @@ export default function CallControlsFooter({
       ) {
         return
       }
-      // ★ 上記以外（ポップアップの外側）がクリックされたら閉じる
       setShowDeviceSettings(false)
     }
 
-    // ★ ポップアップが表示されているときだけイベントリスナーを追加
     if (showDeviceSettings) {
       document.addEventListener('mousedown', handleClickOutside)
     } else {
-      // ★ ポップアップが非表示になったらリスナーを削除 (クリーンアップでも行うが念のため)
       document.removeEventListener('mousedown', handleClickOutside)
     }
 
-    // クリーンアップ関数
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showDeviceSettings]) // showDeviceSettings が変わるたびに実行
+  }, [showDeviceSettings])
 
   return (
     <div className={styles.footerContainer}>
@@ -157,9 +150,8 @@ export default function CallControlsFooter({
         </div>
       )}
 
-      {/* メインコントロール */}
-      <div className={styles.controls}>
-        {/* ルームコード表示＆コピー (元のシンプルな形に戻す) */}
+      {/* ★ 左側コントロール (部屋コード) */}
+      <div className={styles.leftControls}>
         {displayCode && (
           <div className={styles.roomCodeContainerFooter}>
             <span className={styles.roomLabelFooter}>部屋コード:</span>
@@ -169,7 +161,6 @@ export default function CallControlsFooter({
               title={'クリックしてルームコードをコピー'}
             >
               <span className={styles.roomCodeValueFooter}>{displayCode}</span>
-              {/* ★ FiCopy アイコンは削除 */}
               <div
                 className={`${styles.copyTooltip} ${isCopied ? styles.visible : ''}`}
               >
@@ -179,15 +170,10 @@ export default function CallControlsFooter({
             </div>
           </div>
         )}
+      </div>
 
-        {/* 画面共有インジケーター */}
-        {sharingParticipantName && (
-          <div className={styles.footerSharingIndicator}>
-            {sharingParticipantName}が画面共有中
-          </div>
-        )}
-
-        {/* 各種コントロールボタン (アイコン化は維持) */}
+      {/* ★ 中央コントロール (主要ボタン) */}
+      <div className={styles.controls}>
         <button
           onClick={toggleMic}
           className={`${styles.controlButton} ${isMuted ? styles.mutedButton : ''}`}
@@ -218,11 +204,14 @@ export default function CallControlsFooter({
         >
           <FiPhone />
         </button>
+      </div>
 
+      {/* ★ 右側コントロール (音量スライダー → 共有インジケーター) */}
+      <div className={styles.rightControls}>
         {/* 画面共有ボリューム */}
         {screenSharingPeerId && screenSharingPeerId !== myPeerId && (
           <div className={styles.screenVolumeControl}>
-            <FiVolume2 className={styles.volumeIcon} />
+            <FiMonitor className={styles.volumeIcon} />
             <input
               type='range'
               min='0'
@@ -235,6 +224,12 @@ export default function CallControlsFooter({
               className={styles.screenVolumeSlider}
               title={`画面共有の音量: ${Math.round(screenVolume * 100)}%`}
             />
+          </div>
+        )}
+        {/* 画面共有インジケーター */}
+        {sharingParticipantName && (
+          <div className={styles.footerSharingIndicator}>
+            {sharingParticipantName}が画面共有中
           </div>
         )}
       </div>

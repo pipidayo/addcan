@@ -1,25 +1,60 @@
 /* src/app/components/CallControlsFooter/styles.module.css */
+:root {
+  --accent-color-speaking-rgb: 14, 165, 233; /* 水色 RGB (例: sky-500) */
+  /* 紫の変数も必要なら残す */
+  --accent-color-primary-rgb: 91, 33, 182;
+  /* 赤色の変数も定義しておくと便利 */
+  --muted-red-rgb: 220, 38, 38;
+}
+
 .footerContainer {
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
-  background-color: rgb(36, 30, 46);
+  background-color: rgb(36, 30, 46); /* 元の背景色 */
   padding: 10px 20px;
   box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
   border-top: 1px solid rgba(28, 14, 51);
   z-index: 1000;
   display: flex;
-  justify-content: center;
+  /* ★ justify-content を space-between に変更 */
+  justify-content: space-between;
   align-items: center;
 }
 
-.controls {
+/* ★ 左側コントロール */
+.leftControls {
   display: flex;
-  align-items: center; /* 要素を垂直方向に中央揃え */
-  gap: 15px;
+  align-items: center;
+  gap: 1rem; /* 必要に応じて調整 */
+  flex: 1; /* 左寄せ */
+  justify-content: flex-end;
+  min-width: 0; /* flex アイテムが縮小できるように */
+  padding-right: 24px;
 }
 
+/* ★ 中央コントロール */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 15px; /* ボタン間隔 */
+  /* flex: 1; は不要 */
+  /* justify-content: center; は不要 */
+}
+
+/* ★ 右側コントロール */
+.rightControls {
+  display: flex;
+  align-items: center;
+  gap: 1rem; /* スライダーとインジケーターの間隔 */
+  flex: 1; /* 右寄せ */
+  justify-content: flex-start;
+  min-width: 0; /* flex アイテムが縮小できるように */
+  padding-left: 24px;
+}
+
+/* ★ コントロールボタン共通スタイル (元のスタイルに戻す) */
 .controlButton {
   background-color: #4a4e5a;
   color: white;
@@ -34,6 +69,9 @@
   font-size: 1.5rem;
   transition: background-color 0.2s ease;
 }
+.controlButton svg {
+  stroke-width: 2;
+}
 
 .controlButton:hover {
   background-color: #616570;
@@ -45,6 +83,7 @@
   opacity: 0.6;
 }
 
+/* ★ ミュートボタン (元のスタイル) */
 .mutedButton {
   background-color: #d9534f;
 }
@@ -52,29 +91,19 @@
   background-color: #c9302c;
 }
 
-/* ★ 画面共有中 or 設定表示中のボタンスタイル */
+/* ★ 画面共有中 or 設定表示中のボタンスタイル (元のスタイル) */
 .activeStateButton {
-  background-color: rgba(
-    var(--accent-color-primary-rgb),
-    0.8
-  ); /* 透明感のある薄い紫 */
-  border-color: rgba(
-    var(--accent-color-primary-rgb),
-    0.9
-  ); /* ボーダーも少し紫に */
-  /* color: var(--button-text-color); アイコン色は通常と同じ白 */
+  background-color: rgba(var(--accent-color-speaking-rgb), 0.6);
 }
-/* ★ ホバー効果も少し調整 (任意) */
 .activeStateButton:hover:not(:disabled) {
-  background-color: rgba(var(--accent-color-primary-rgb), 0.4);
-  border-color: rgba(var(--accent-color-primary-rgb), 0.5);
+  background-color: rgba(var(--accent-color-speaking-rgb), 0.7);
 }
-/* ★ アクティブ効果も少し調整 (任意) */
 .activeStateButton:active:not(:disabled) {
-  background-color: rgba(var(--accent-color-primary-rgb), 0.5);
+  background-color: rgba(var(--accent-color-speaking-rgb), 0.8);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
+/* ★ 退出ボタン (元のスタイル) */
 .leaveButton {
   background-color: #d9534f;
 }
@@ -82,158 +111,162 @@
   background-color: #c9302c;
 }
 
-/* デバイス設定ポップアップ */
+/* デバイス設定ポップアップ (元のスタイルに戻すか、必要なら調整) */
 .deviceSettingsPopup {
   position: absolute;
-  bottom: calc(100% + 10px); /* フッターの上 10px */
+  bottom: calc(100% + 10px);
   left: 50%;
   transform: translateX(-50%);
-  /* ★ 背景色、ぼかし、ボーダー、影を globals.css の変数で設定 */
-  background-color: rgba(var(--background-rgb), 0.8); /* 例: 背景色変数 */
-  backdrop-filter: blur(var(--blur-intensity));
-  -webkit-backdrop-filter: blur(var(--blur-intensity));
-  border: 1px solid rgba(var(--border-color-subtle-rgb), 0.2); /* 細いボーダー */
-  box-shadow: var(--shadow-lg); /* より大きな影 */
-  padding: 20px; /* パディングを少し広げる */
-  border-radius: var(--border-radius); /* 角丸を適用 */
+  background-color: #3a3d44; /* 元の背景色 */
+  padding: 15px;
+  border-radius: 8px; /* 元の角丸 */
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3); /* 元の影 */
   display: flex;
   flex-direction: column;
-  gap: 15px; /* 要素間のギャップを調整 */
-  min-width: 300px; /* 幅を少し広げる */
+  gap: 10px;
+  min-width: 250px; /* 元の幅 */
   z-index: 1001;
+  /* backdrop-filter などは削除 */
 }
 
 .deviceSelector {
   display: flex;
   align-items: center;
-  gap: 10px; /* ラベルとセレクトボックスの間隔 */
+  gap: 8px; /* 元の間隔 */
 }
 
 .deviceSelector label {
-  color: var(--text-color-muted);
-  font-size: 0.9rem;
-  width: 90px; /* 幅を固定 */
+  color: #eee; /* 元の色 */
+  font-size: 0.9rem; /* 元のサイズ */
+  width: 70px; /* 元の幅 */
   text-align: right;
   flex-shrink: 0;
 }
 
-/* ★ セレクトボックスのスタイルを大幅に変更 */
+/* セレクトボックスのスタイル (元のスタイルに戻すか、必要なら調整) */
 .deviceSelector select {
-  /* === 基本スタイル === */
-  appearance: none; /* ブラウザ標準スタイルを無効化 */
-  -webkit-appearance: none;
-  -moz-appearance: none;
+  appearance: auto; /* 標準スタイルに戻す */
   flex-grow: 1;
-  padding: 10px 36px 10px 12px; /* 右側に矢印用のスペースを確保 */
-  border-radius: var(--border-radius-small); /* 小さめの角丸 */
-  /* ★ 背景色、文字色、ボーダー色を globals.css の変数で設定 */
-  background-color: #ffffff;
-  color: var(--text-color-on-light-bg, #111827);
-  border: 1px solid rgba(var(--input-border-color-rgba));
+  padding: 5px; /* 元のパディング */
+  border-radius: 4px; /* 元の角丸 */
+  background-color: #fff; /* 元の背景 */
+  color: #333; /* 元の文字色 */
+  border: 1px solid #555; /* 元のボーダー */
   font-size: 0.95rem;
   cursor: pointer;
-  transition:
-    border-color var(--transition-duration) ease,
-    box-shadow var(--transition-duration) ease;
-
-  /* === カスタム矢印 === */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); /* 下向き矢印 SVG (色は --text-color-muted に合わせて #9ca3af) */
-  background-repeat: no-repeat;
-  background-position: right 10px center; /* 右端から10px、垂直中央 */
-  background-size: 16px 16px; /* 矢印のサイズ */
+  /* transition などは削除 */
+  /* background-image などは削除 */
 }
-
-/* ★ セレクトボックスのホバー時 */
+/* ホバー、フォーカス、無効時のスタイルも元に戻すか削除 */
 .deviceSelector select:hover {
-  border-color: rgba(var(--input-border-color-hover-rgba));
+  /* 元のホバー効果 (なければ削除) */
 }
-
-/* ★ セレクトボックスのフォーカス時 */
 .deviceSelector select:focus {
-  outline: none;
-  border-color: rgba(var(--input-border-color-focus-rgba));
-  box-shadow: 0 0 0 3px rgba(var(--accent-color-primary-rgb), 0.3); /* フォーカスリング */
+  /* 元のフォーカス効果 (なければ削除) */
+  outline: auto;
+  box-shadow: none;
 }
-
-/* ★ セレクトボックスが無効な場合 */
 .deviceSelector select:disabled {
-  background-color: rgba(var(--input-bg-rgba), 0.5);
+  /* 元の無効時スタイル */
+  background-color: #eee;
   cursor: not-allowed;
   opacity: 0.7;
 }
 
-.footerSharingIndicator {
-  margin-right: 1rem;
-  padding: 0.5rem 1rem;
-  background-color: rgba(0, 0, 0, 0.5);
-  color: white;
-  border-radius: 4px;
-  font-size: 0.9rem;
-  white-space: nowrap;
+/* ★ 画面共有ボリュームコントロール */
+.screenVolumeControl {
   display: flex;
   align-items: center;
+  gap: 8px;
+  color: var(--text-color-muted);
+  font-size: 0.9rem;
+}
+.volumeIcon {
+  font-size: 1.2rem;
+  color: var(--text-color-muted);
+}
+/* ★ 画面共有音量スライダーのスタイル (元のスタイル) */
+.screenVolumeSlider {
+  width: 100px;
+  height: 6px;
+  cursor: pointer;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+  transition: opacity 0.2s;
+}
+/* ★ 画面共有音量スライダーのつまみ (元のスタイル) */
+.screenVolumeSlider::-webkit-slider-thumb {
+  appearance: none;
+  width: 6px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.screenVolumeSlider::-moz-range-thumb {
+  width: 6px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 2px;
+  cursor: pointer;
+  border: none;
 }
 
 /* --- ルームコード関連スタイル --- */
 .roomCodeContainerFooter {
   display: flex;
   align-items: center;
-  margin-right: 1rem;
+  /* ★ margin-right を削除 */
 }
-
 .roomLabelFooter {
   font-size: 0.9rem;
   color: var(--text-color-muted);
   margin-right: 8px;
   white-space: nowrap;
 }
-
 .roomCodeFooter {
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: rgba(255, 255, 255, 0.1);
   padding: 6px 12px;
-  border-radius: var(--border-radius);
+  border-radius: 6px;
   cursor: pointer;
   transition:
     background-color var(--transition-duration) ease,
     border-color var(--transition-duration) ease;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  min-width: 100px; /* 最小幅を調整 */
+  min-width: 100px;
   text-align: center;
   position: relative;
 }
-
 .roomCodeFooter:hover {
   background-color: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
 }
-
 .roomCodeValueFooter {
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--text-color-on-dark-bg);
   letter-spacing: 1px;
-  font-family: var(--font-geist-mono);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu,
+    Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-/* ↓↓↓ コピー完了吹き出しのスタイルを追加 ↓↓↓ */
+/* コピー完了吹き出し */
 .copyTooltip {
   position: absolute;
-  bottom: calc(100% + 5px); /* ボタンの上に8pxの間隔 */
+  bottom: calc(100% + 5px);
   left: 50%;
-  transform: translateX(-50%) translateY(8px); /* 初期位置: 少し下 */
-  background-color: rgba(
-    var(--accent-color-primary-rgb),
-    0.6
-  ); /* かっこいい紫 */
+  transform: translateX(-50%) translateY(8px);
+  background-color: rgba(var(--accent-color-speaking-rgb), 0.9);
   color: var(--text-color-on-dark-bg);
   padding: 5px 10px;
   border-radius: 4px;
   font-size: 0.8rem;
   font-weight: 500;
-
   white-space: nowrap;
   opacity: 0;
   transition:
@@ -241,9 +274,13 @@
     transform 0.2s ease-out;
   pointer-events: none;
   z-index: 10;
+  display: flex;
+  align-items: center;
 }
-
-/* 吹き出しの矢印 */
+.copyTooltip.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 .copyTooltip::after {
   content: '';
   position: absolute;
@@ -256,8 +293,15 @@
     transparent transparent;
 }
 
-/* 表示状態の吹き出しスタイル */
-.copyTooltip.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0); /* 本来の位置へ */
+/* 共有インジケーター */
+.footerSharingIndicator {
+  /* ★ margin-right を削除 */
+  padding: 0.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
 }

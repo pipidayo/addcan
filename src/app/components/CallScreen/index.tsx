@@ -913,15 +913,15 @@ export default function CallScreen() {
                 key={p.id}
                 className={`${styles.participantItem} ${styles.selfParticipant} ${p.isSpeaking ? styles.speakingParticipant : ''}`}
               >
-                <span className={styles.participantName}>
-                  {p.name} (あなた)
-                </span>{' '}
-                <span
-                  className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
-                >
-                  {' '}
-                  {p.isMuted ? '🔇' : '🎤'}{' '}
-                </span>
+                <div className={styles.participantInfo}>
+                  <span className={styles.participantName}>{p.name}</span>{' '}
+                  <span
+                    className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+                  >
+                    {' '}
+                    {p.isMuted ? '🔇' : '🎤'}{' '}
+                  </span>
+                </div>
               </li>
             )
           }
@@ -931,7 +931,16 @@ export default function CallScreen() {
               key={p.id}
               className={`${styles.participantItem} ${p.isSpeaking ? styles.speakingParticipant : ''}`}
             >
-              <span className={styles.participantName}>{p.name}</span>
+              <div className={styles.participantInfo}>
+                <span className={styles.participantName}>{p.name}</span>
+                <span
+                  className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
+                >
+                  {' '}
+                  {p.isMuted ? '🔇' : '🎤'}{' '}
+                </span>
+              </div>
+
               <input
                 type='range'
                 min='0'
@@ -944,12 +953,6 @@ export default function CallScreen() {
                 className={styles.volumeSlider}
                 title={`音量: ${Math.round(currentVolume * 100)}%`}
               />
-              <span
-                className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
-              >
-                {' '}
-                {p.isMuted ? '🔇' : '🎤'}{' '}
-              </span>
             </li>
           )
         })}
