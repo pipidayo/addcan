@@ -917,8 +917,9 @@ export default function CallScreen() {
               >
                 <div className={styles.participantInfo}>
                   <span className={styles.participantName}>{p.name}</span>
-                  {/* ★ 自分が画面共有中のアイコン */}
-                  {p.id === screenSharingPeerId && (
+                  {/* ★ 自分が画面共有中のアイコン (ローカル状態 or グローバル状態) */}
+                  {/* isScreenSharing は自分が共有ボタンを押した状態 */}
+                  {(isScreenSharing || p.id === screenSharingPeerId) && (
                     <FiMonitor
                       className={styles.screenShareIndicatorIcon}
                       title='画面共有中'

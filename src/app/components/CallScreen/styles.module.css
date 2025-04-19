@@ -114,12 +114,12 @@
 
 .participantInfo {
   display: flex;
-  justify-content: flex-start;
-  gap: 8px;
+  justify-content: space-between;
   align-items: center;
   width: 100%;
   position: relative;
   z-index: 1;
+  padding-right: 30px; /* muteIndicatorIcon の width + α */
 }
 
 .selfParticipant {
@@ -135,26 +135,40 @@
   color: rgba(255, 255, 255, 0.6);
   /* ★ 色の変化を滑らかにする transition を追加 */
   transition: color var(--transition-duration) ease;
-  max-width: calc(100% - 40px);
 }
 
 /* ★ 画面共有中アイコンのスタイル */
 .screenShareIndicatorIcon {
-  font-size: 1rem; /* サイズ調整 */
-  color: rgba(var(--accent-color-speaking-rgb), 1); /* 水色 */
-  flex-shrink: 0; /* 縮まないように */
+  /* ★ font-size をミュートアイコンと合わせる */
+  font-size: 1.1rem;
+  color: rgba(var(--accent-color-speaking-rgb), 1);
+  flex-shrink: 0;
+  margin-left: px;
+  /* ★ (任意) サイズを固定してレイアウトずれを防ぐ */
+  width: 1.2em;
+  height: 1.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-2px);
 }
 
 /* ★ ミュート時に表示されるアイコンのスタイル */
 .muteIndicatorIcon {
   position: absolute;
   top: 14px; /* participantItem の padding-top と合わせる */
-  right: 20px; /* participantItem の padding-right と合わせる */
-  font-size: 1.1rem;
+  right: 20px;
+  font-size: 1rem;
   color: rgba(255, 255, 255, 0.8); /* アイコンの色 (白系) */
   opacity: 0; /* 初期状態は非表示 */
   transition: opacity var(--transition-duration) ease;
   z-index: 1; /* participantInfo と同じ階層 */
+  /* ★ アイコンの幅を確保 */
+  width: 1.2em;
+  height: 1.2em;
+  display: flex; /* 中央揃えのため */
+  align-items: center;
+  justify-content: center;
 }
 /* ★ ミュート時にアイコンを表示 */
 .mutedEffect .muteIndicatorIcon {
