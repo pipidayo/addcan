@@ -118,7 +118,7 @@ export default function CallControlsFooter({
       {showDeviceSettings && (
         <div ref={settingsPopupRef} className={styles.deviceSettingsPopup}>
           <div className={styles.deviceSelector}>
-            <label htmlFor='mic-select-footer'>マイク:</label>
+            <label htmlFor='mic-select-footer'>マイク</label>
             <select
               id='mic-select-footer'
               value={selectedMicId}
@@ -133,7 +133,7 @@ export default function CallControlsFooter({
             </select>
           </div>
           <div className={styles.deviceSelector}>
-            <label htmlFor='speaker-select-footer'>スピーカー:</label>
+            <label htmlFor='speaker-select-footer'>スピーカー</label>
             <select
               id='speaker-select-footer'
               value={selectedSpeakerId}
@@ -154,7 +154,7 @@ export default function CallControlsFooter({
       <div className={styles.leftControls}>
         {displayCode && (
           <div className={styles.roomCodeContainerFooter}>
-            <span className={styles.roomLabelFooter}>部屋コード:</span>
+            <span className={styles.roomLabelFooter}>部屋コード</span>
             <div
               className={styles.roomCodeFooter}
               onClick={handleCopyCode}

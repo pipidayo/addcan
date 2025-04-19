@@ -9,6 +9,7 @@
   --accent-color-primary-rgb: 91, 33, 182; /* 紫 RGB (#5b21b6) */
   --accent-color-self: #5b21b6; /* selfParticipant 用 (現在は未使用) */
   --accent-color-speaking-rgb: 14, 165, 233; /* 水色 RGB (例: sky-500) */
+  --muted-red-rgb: 220, 38, 38;
 
   --icon-color-muted: #dc2626;
 
@@ -39,7 +40,7 @@
   /* ★ デフォルトの影をより繊細に (または削除) */
   --shadow: 0 2px 4px rgba(0, 0, 0, 0.05); /* 例: より軽い影 */
   /* --shadow: none; */ /* または影なし */
-  --transition-duration: 0.2s;
+  --transition-duration: 0.3s;
 }
 
 /* --- スタイル定義 --- */
@@ -84,22 +85,41 @@
   display: flex;
   flex-direction: column;
   gap: 8px; /* 名前エリアと音量バーの間隔を少し詰める */
-  transition: /* transform は不要に */
+  /* ★ アニメーションの準備 */
+  position: relative; /* アイコン配置の基準 */
+  overflow: hidden; /* はみ出し防止 */
+  /* ★ 赤背景アニメーション用の設定 */
+  background-image: linear-gradient(
+    to left,
+    rgba(var(--muted-red-rgb), 0.6),
+    rgba(var(--muted-red-rgb), 0.6)
+  );
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 0% 100%; /* 初期状態は幅0% */
+  transition:
     box-shadow var(--transition-duration) ease,
-    /* 発言時の影のため */ background-color var(--transition-duration) ease; /* ホバー効果のため */
+    background-color var(--transition-duration) ease,
+    /* ホバー用 */ background-size var(--transition-duration) ease-in-out; /* ★ 背景サイズのアニメーション */
 }
 
 /* ★ ホバー時の背景色を少し明るく (または薄紫に) */
 .participantItem:hover {
   background-color: rgba(var(--accent-color-primary-rgb), 0.1); /* 例: 薄紫 */
-  /* background-color: rgba(0, 0, 0, 0.3); */ /* 例: 少し濃い黒 */
+}
+/* ★ ミュート時のスタイル */
+.mutedEffect {
+  background-size: 100% 100%; /* 背景を100%に広げる */
 }
 
 .participantInfo {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 8px;
   align-items: center;
   width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .selfParticipant {
@@ -107,7 +127,6 @@
 }
 
 .participantName {
-  margin-right: 12px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -116,15 +135,30 @@
   color: rgba(255, 255, 255, 0.6);
   /* ★ 色の変化を滑らかにする transition を追加 */
   transition: color var(--transition-duration) ease;
+  max-width: calc(100% - 40px);
 }
 
-.muteIcon {
+/* ★ 画面共有中アイコンのスタイル */
+.screenShareIndicatorIcon {
+  font-size: 1rem; /* サイズ調整 */
+  color: rgba(var(--accent-color-speaking-rgb), 1); /* 水色 */
+  flex-shrink: 0; /* 縮まないように */
+}
+
+/* ★ ミュート時に表示されるアイコンのスタイル */
+.muteIndicatorIcon {
+  position: absolute;
+  top: 14px; /* participantItem の padding-top と合わせる */
+  right: 20px; /* participantItem の padding-right と合わせる */
   font-size: 1.1rem;
-  flex-shrink: 0;
-  color: var(--text-color-muted);
-  transition:
-    color var(--transition-duration) ease,
-    transform var(--transition-duration) ease;
+  color: rgba(255, 255, 255, 0.8); /* アイコンの色 (白系) */
+  opacity: 0; /* 初期状態は非表示 */
+  transition: opacity var(--transition-duration) ease;
+  z-index: 1; /* participantInfo と同じ階層 */
+}
+/* ★ ミュート時にアイコンを表示 */
+.mutedEffect .muteIndicatorIcon {
+  opacity: 1;
 }
 
 /* ★ 音量バーのスタイル */
@@ -140,8 +174,8 @@
   border-radius: 3px;
   outline: none;
   transition: opacity 0.2s;
-  /* ★ 内側の影を削除 */
-  /* box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4); */
+  position: relative;
+  z-index: 1;
 }
 
 /* ★ スライダーのつまみ (Chrome, Edge, Safari) */
@@ -156,10 +190,6 @@
   /* ★ 角丸を調整 */
   border-radius: 2px;
   cursor: pointer;
-  /* ★ ボーダーと影を削除 */
-  /* border: 2px solid var(--text-color-on-dark-bg); */
-  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
-  /* transition: transform 0.1s ease; */ /* ホバー効果削除 */
 }
 
 /* ★ スライダーのつまみ (Firefox) */
@@ -176,14 +206,6 @@
 
 .selfParticipant .muteIcon {
   color: rgba(255, 255, 255, 0.75);
-}
-
-.muted {
-  color: var(--icon-color-muted);
-}
-
-.selfParticipant .muted {
-  color: #fca5a5;
 }
 
 li.speakingParticipant {

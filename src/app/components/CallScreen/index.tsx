@@ -6,6 +6,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react' // Dis
 import io, { Socket } from 'socket.io-client'
 import CallControlsFooter from '../CallControlsFooter' // パスを確認してください
 import { usePeerConnection } from '@/app/hooks/usePeerConnection'
+import { FiMicOff, FiMonitor } from 'react-icons/fi'
 // ★ 任意: アイコンを使う場合
 // import { ComputerDesktopIcon, StopCircleIcon } from '@heroicons/react/24/outline';
 
@@ -907,38 +908,43 @@ export default function CallScreen() {
       {/* 参加者リスト */}
       <ul className={styles.participantList}>
         {participants.map((p) => {
+          // --- 自分自身の表示 ---
           if (p.isSelf) {
             return (
               <li
                 key={p.id}
-                className={`${styles.participantItem} ${styles.selfParticipant} ${p.isSpeaking ? styles.speakingParticipant : ''}`}
+                className={`${styles.participantItem} ${styles.selfParticipant} ${p.isSpeaking ? styles.speakingParticipant : ''} ${p.isMuted ? styles.mutedEffect : ''}`}
               >
                 <div className={styles.participantInfo}>
-                  <span className={styles.participantName}>{p.name}</span>{' '}
-                  <span
-                    className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
-                  >
-                    {' '}
-                    {p.isMuted ? '🔇' : '🎤'}{' '}
-                  </span>
+                  <span className={styles.participantName}>{p.name}</span>
+                  {/* ★ 自分が画面共有中のアイコン */}
+                  {p.id === screenSharingPeerId && (
+                    <FiMonitor
+                      className={styles.screenShareIndicatorIcon}
+                      title='画面共有中'
+                    />
+                  )}
                 </div>
+                <FiMicOff className={styles.muteIndicatorIcon} />
               </li>
             )
           }
+          // --- 他の参加者の表示 ---
           const currentVolume = participantVolumes[p.id] ?? 1.0
           return (
             <li
               key={p.id}
-              className={`${styles.participantItem} ${p.isSpeaking ? styles.speakingParticipant : ''}`}
+              className={`${styles.participantItem} ${p.isSpeaking ? styles.speakingParticipant : ''} ${p.isMuted ? styles.mutedEffect : ''}`}
             >
               <div className={styles.participantInfo}>
                 <span className={styles.participantName}>{p.name}</span>
-                <span
-                  className={`${styles.muteIcon} ${p.isMuted ? styles.muted : ''}`}
-                >
-                  {' '}
-                  {p.isMuted ? '🔇' : '🎤'}{' '}
-                </span>
+                {/* ★ 他の参加者が画面共有中のアイコン */}
+                {p.id === screenSharingPeerId && (
+                  <FiMonitor
+                    className={styles.screenShareIndicatorIcon}
+                    title='画面共有中'
+                  />
+                )}
               </div>
 
               <input
@@ -953,6 +959,8 @@ export default function CallScreen() {
                 className={styles.volumeSlider}
                 title={`音量: ${Math.round(currentVolume * 100)}%`}
               />
+              {/* ★ ミュートアイコン (絶対配置) */}
+              <FiMicOff className={styles.muteIndicatorIcon} />
             </li>
           )
         })}
