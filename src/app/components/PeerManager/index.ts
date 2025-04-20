@@ -5,29 +5,36 @@ import Peer, { MediaConnection, DataConnection, PeerJSOption } from 'peerjs'
 type Message =
   | { type: 'USER_NAME'; payload: string }
   | { type: 'MUTE_STATUS'; payload: boolean }
-  | { type: 'SCREEN_SHARE_STATUS'; payload: boolean }
 
 export type InitPeerOptions = {
   roomCode: string // roomCode は PeerManager 内部では直接使わないかも
-  onReceiveStream: (stream: MediaStream, peerId: string) => void
-  onReceiveScreenStream: (stream: MediaStream, peerId: string) => void
+  onRemoteStream: (stream: MediaStream, peerId: string) => void
   onPeerOpen: (id: string) => void
   onLocalStream: (stream: MediaStream) => void
   onReceiveUserName: (peerId: string, name: string) => void
   onReceiveMuteStatus: (peerId: string, isMuted: boolean) => void
   onPeerDisconnect: (peerId: string) => void
   onSpeakingStatusChange?: (peerId: string, isSpeaking: boolean) => void
-  onReceiveScreenShareStatus?: (peerId: string, isSharing: boolean) => void
   onLocalScreenStreamUpdate?: (stream: MediaStream | null) => void
+  onRemoteScreenStreamUpdate?: (stream: MediaStream, peerId: string) => void
 }
 
-interface AudioAnalysisData {
+type AudioAnalysisData = {
   context: AudioContext
   analyser: AnalyserNode
   source: MediaStreamAudioSourceNode
   lastIsSpeaking: boolean
   animationFrameId: number | null
   dataArray: Uint8Array
+}
+
+// ★ 音声ミキシング用リソースの型
+type AudioMixingResources = {
+  audioContext: AudioContext
+  micSource: MediaStreamAudioSourceNode
+  screenSource: MediaStreamAudioSourceNode
+  destination: MediaStreamAudioDestinationNode
+  mixedTrack: MediaStreamTrack // 生成されたミックス音声トラック
 }
 
 // --- PeerManager クラス定義 ---
@@ -44,6 +51,7 @@ export class PeerManager {
   private isMuted = false
   private audioAnalysisMap = new Map<string, AudioAnalysisData>()
   private readonly speakingThreshold = 10
+  private audioMixingResources: AudioMixingResources | null = null
 
   // --- 型ガード関数 ---
   private isMessage(data: unknown): data is Message {
@@ -54,11 +62,35 @@ export class PeerManager {
       case 'USER_NAME':
         return typeof potentialMessage.payload === 'string'
       case 'MUTE_STATUS':
-      case 'SCREEN_SHARE_STATUS':
         return typeof potentialMessage.payload === 'boolean'
       default:
         return false
     }
+  }
+
+  // ★★★ Canvasからダミー映像トラックを生成するヘルパー関数を追加 ★★★
+  private createDummyVideoTrack(): MediaStreamVideoTrack {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1
+    canvas.height = 1
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      // Optional: Draw something minimal if needed, e.g., a black pixel
+      ctx.fillStyle = 'black'
+      ctx.fillRect(0, 0, 1, 1)
+    }
+    // captureStream needs to be called on the canvas element
+    const stream = canvas.captureStream(1) // Capture at 1 frame per second
+    const track = stream.getVideoTracks()[0]
+    if (!track) {
+      // This should ideally not happen if captureStream is supported
+      throw new Error('Failed to create dummy video track from canvas.')
+    }
+    track.enabled = false // Start disabled
+    console.log(
+      `[PeerManager instance ${this.peer?.id}] Created dummy video track: ${track.id}`
+    )
+    return track
   }
 
   // --- 音声分析関連メソッド ---
@@ -164,36 +196,42 @@ export class PeerManager {
       this.dataConnections[dataConn.peer] = dataConn
       this.sendMessage('USER_NAME', this.myName, dataConn.peer)
       this.sendMessage('MUTE_STATUS', this.isMuted, dataConn.peer)
-      if (this.screenStream)
-        this.sendMessage('SCREEN_SHARE_STATUS', true, dataConn.peer)
     })
     dataConn.on('data', (data) => {
       console.log(
-        `[PeerManager instance ${this.peer?.id}] Received data from ${dataConn.peer}:`,
-        data
+        `★★★ [PeerManager instance ${this.peer?.id}] 'data' event fired for connection with ${dataConn.peer}`
       )
-      if (this.isMessage(data) && this.options) {
-        switch (data.type) {
-          case 'USER_NAME':
-            this.options.onReceiveUserName(dataConn.peer, data.payload)
-            break
-          case 'MUTE_STATUS':
-            this.options.onReceiveMuteStatus(dataConn.peer, data.payload)
-            break
-          case 'SCREEN_SHARE_STATUS':
-            this.options.onReceiveScreenShareStatus?.(
-              dataConn.peer,
-              data.payload
-            )
-            break
-        }
-      } else {
-        console.warn(
-          `[PeerManager instance ${this.peer?.id}] Received unknown message type:`,
-          data
-        )
-      }
+
+      this.handleDataMessage(data, dataConn.peer) // handleDataMessage を呼び出す
     })
+    //   if (this.isMessage(data) && this.options) {
+    //     switch (data.type) {
+    //       case 'USER_NAME':
+    //         this.options.onReceiveUserName(dataConn.peer, data.payload)
+    //         break
+    //       case 'MUTE_STATUS':
+    //         this.options.onReceiveMuteStatus(dataConn.peer, data.payload)
+    //         break
+    //       case 'SCREEN_SHARE_STATUS':
+    //         this.options.onReceiveScreenShareStatus?.(
+    //           dataConn.peer,
+    //           data.payload
+    //         )
+    //         break
+    //       case 'TRACKS_UPDATED':
+    //         console.log(
+    //           `★★★ [PeerManager instance ${this.peer?.id}] Received TRACKS_UPDATED from ${dataConn.peer}`
+    //         )
+    //         this.handleTracksUpdated(dataConn.peer)
+    //         break
+    //     }
+    //   } else {
+    //     console.warn(
+    //       `[PeerManager instance ${this.peer?.id}] Received unknown message type:`,
+    //       data
+    //     )
+    //   }
+    // })
     dataConn.on('close', () => {
       console.log(
         `[PeerManager instance ${this.peer?.id}] Data connection with ${dataConn.peer} closed.`
@@ -209,48 +247,77 @@ export class PeerManager {
     })
   }
 
-  private handleDisconnect(peerId: string) {
-    if (!peerId) return
+  private handleDataMessage(data: unknown, peerId: string) {
+    // ★★★ 1箇所目: 関数の最初にログを追加 ★★★
     console.log(
-      `[PeerManager instance ${this.peer?.id}] Handling disconnect for peer: ${peerId}`
+      `★★★ [PeerManager instance ${this.peer?.id}] Raw data received from ${peerId}:`,
+      data
     )
-    this.stopAudioAnalysis(peerId) // 音声分析停止
 
-    // 音声接続のクリーンアップ
-    if (this.mediaConnections[peerId]) {
-      this.mediaConnections[peerId].close()
-      delete this.mediaConnections[peerId]
-      console.log(
-        `[PeerManager instance ${this.peer?.id}] Closed media connection with ${peerId}`
+    // 型ガード: data が object で type プロパティを持つか確認
+    // if (
+    //   typeof data !== 'object' ||
+    //   data === null ||
+    //   !('type' in data) ||
+    //   typeof data.type !== 'string'
+    // ) {
+    //   console.warn(
+    //     `[PeerManager instance ${this.peer?.id}] Received invalid data format from ${peerId}:`,
+    //     data
+    //   )
+    //   return
+    // }
+    // ★★★ 代わりに isMessage 型ガードを使用 ★★★
+    if (!this.isMessage(data)) {
+      console.warn(
+        `[PeerManager instance ${this.peer?.id}] Received invalid or unknown message format from ${peerId}:`,
+        data
       )
+      return
     }
-    // データ接続のクリーンアップ
-    if (this.dataConnections[peerId]) {
-      this.dataConnections[peerId].close()
-      delete this.dataConnections[peerId]
-      console.log(
-        `[PeerManager instance ${this.peer?.id}] Closed data connection with ${peerId}`
-      )
-    }
-    // ★ 画面共有接続のクリーンアップを追加
-    if (this.screenMediaConnections[peerId]) {
-      this.screenMediaConnections[peerId].close()
-      delete this.screenMediaConnections[peerId]
-      console.log(
-        `[PeerManager instance ${this.peer?.id}] Closed screen media connection with ${peerId}`
-      )
-      // 相手が切断した場合、共有状態もリセット通知 (必要に応じて)
-      this.options?.onReceiveScreenShareStatus?.(peerId, false)
-    }
+    // ★★★ 2箇所目: 型ガードの後にログを追加 ★★★
+    console.log(
+      `[PeerManager instance ${this.peer?.id}] Processing data message from ${peerId}. Type: ${data.type}`
+    )
 
-    this.options?.onPeerDisconnect(peerId) // 参加者削除通知
+    switch (data.type) {
+      case 'USER_NAME':
+        if (typeof data.payload === 'string') {
+          console.log(
+            `[PeerManager instance ${this.peer?.id}] Received USER_NAME from ${peerId}: ${data.payload}`
+          )
+          this.options?.onReceiveUserName?.(peerId, data.payload)
+        } else {
+          console.warn(
+            `[PeerManager instance ${this.peer?.id}] Invalid USER_NAME payload from ${peerId}`
+          )
+        }
+        break
+      case 'MUTE_STATUS':
+        if (typeof data.payload === 'boolean') {
+          console.log(
+            `[PeerManager instance ${this.peer?.id}] Received MUTE_STATUS from ${peerId}: ${data.payload}`
+          )
+          this.options?.onReceiveMuteStatus?.(peerId, data.payload)
+        } else {
+          console.warn(
+            `[PeerManager instance ${this.peer?.id}] Invalid MUTE_STATUS payload from ${peerId}`
+          )
+        }
+        break
+    }
   }
 
   // --- メディアストリーム関連メソッド ---
+
   private async getLocalStream(deviceId?: string): Promise<MediaStream> {
     const currentAudioTrack = this.localStream?.getAudioTracks()[0]
+    //  ダミー映像トラックも存在するか確認
+    const currentVideoTrack = this.localStream?.getVideoTracks()[0]
+    // キャッシュチェック: 音声デバイスIDが変わらず、かつ映像トラックも存在すればキャッシュを返す
     if (
       this.localStream &&
+      currentVideoTrack && // 映像トラックの存在も確認
       (!deviceId || currentAudioTrack?.getSettings().deviceId === deviceId)
     ) {
       console.log(
@@ -259,6 +326,7 @@ export class PeerManager {
       return this.localStream
     }
 
+    // 既存ストリーム停止
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
     console.log(
@@ -267,20 +335,39 @@ export class PeerManager {
 
     try {
       console.log(
-        `[PeerManager instance ${this.peer?.id}] Requesting local media stream (getUserMedia) with deviceId: ${deviceId || 'default'}`
+        `[PeerManager instance ${this.peer?.id}] Requesting local media stream (getUserMedia - audio only) with deviceId: ${deviceId || 'default'}`
       )
+      //  音声のみ要求
       const constraints: MediaStreamConstraints = {
         audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+        // video: true, // ← 削除！ カメラは要求しない
       }
       const stream = await navigator.mediaDevices.getUserMedia(constraints)
       console.log(
         `[PeerManager instance ${this.peer?.id}] getUserMedia successful (audio only)!`
       )
 
-      // 映像トラック無効化処理は不要
+      // ★★★ ダミー映像トラックを生成して追加 ★★★
+      try {
+        const dummyVideoTrack = this.createDummyVideoTrack()
+        stream.addTrack(dummyVideoTrack)
+        console.log(
+          `[PeerManager instance ${this.peer?.id}] Added dummy video track.`
+        )
+      } catch (dummyTrackError) {
+        console.error(
+          '[PeerManager instance] Failed to create or add dummy video track:',
+          dummyTrackError
+        )
+        // ダミートラックがなくても続行するが、画面共有が失敗する可能性を警告
+        console.warn(
+          '[PeerManager instance] Proceeding without dummy video track. Screen share might fail.'
+        )
+      }
 
       this.localStream = stream
-      this.options?.onLocalStream(stream) // 音声のみの stream を渡す
+      //  onLocalStream には音声＋ダミー映像トラックを含むストリームを渡す
+      this.options?.onLocalStream(stream)
       console.log(
         `[PeerManager instance ${this.peer?.id}] Local media stream obtained and notified.`
       )
@@ -294,8 +381,8 @@ export class PeerManager {
         `[PeerManager instance ${this.peer?.id}] Failed to get local media stream:`,
         err
       )
-      // カメラ拒否時のフォールバックは不要に
-      throw err
+
+      throw err // その他のエラー（マイク拒否など）は再スロー
     }
   }
 
@@ -337,6 +424,39 @@ export class PeerManager {
     }
   }
 
+  // ★ handleDisconnect でも Set から削除する処理を追加 ★
+  private handleDisconnect(peerId: string) {
+    if (!peerId) return
+    console.log(/* ... */)
+    this.stopAudioAnalysis(peerId)
+
+    // 音声接続のクリーンアップ
+    if (this.mediaConnections[peerId]) {
+      this.mediaConnections[peerId].close()
+      delete this.mediaConnections[peerId]
+      console.log(
+        `[PeerManager instance ${this.peer?.id}] Closed media connection with ${peerId}`
+      )
+    }
+    // データ接続のクリーンアップ
+    if (this.dataConnections[peerId]) {
+      this.dataConnections[peerId].close()
+      delete this.dataConnections[peerId]
+      console.log(
+        `[PeerManager instance ${this.peer?.id}] Closed data connection with ${peerId}`
+      )
+    }
+    //  画面共有接続のクリーンアップ
+    if (this.screenMediaConnections[peerId]) {
+      this.screenMediaConnections[peerId].close()
+      delete this.screenMediaConnections[peerId]
+      console.log(
+        `[PeerManager instance ${this.peer?.id}] Closed screen media connection with ${peerId}`
+      )
+    }
+    this.options?.onPeerDisconnect(peerId) // 参加者削除通知
+  }
+
   // --- 公開メソッド ---
   public async initPeer(
     options: InitPeerOptions,
@@ -360,11 +480,10 @@ export class PeerManager {
       try {
         console.log('[PeerManager instance] Creating new Peer.')
 
-        // PeerJS オプションでデバッグレベルを設定 (任意)
         const peerJsOptions: PeerJSOption = {
-          debug: 2, // 0:なし, 1:エラー, 2:警告, 3:情報
+          debug: 2,
         }
-        this.peer = new Peer(peerJsOptions) // オプションを渡す
+        this.peer = new Peer(peerJsOptions)
 
         this.peer.on('open', async (id) => {
           if (!this.peer || this.peer.destroyed) {
@@ -415,15 +534,19 @@ export class PeerManager {
               console.log(
                 `[PeerManager instance ${this.peer?.id}] Received screen stream from ${call.peer}`
               )
-              this.options?.onReceiveScreenStream(remoteScreenStream, call.peer)
+              // ★ onRemoteScreenStreamUpdate を呼び出す
+              this.options?.onRemoteScreenStreamUpdate?.(
+                remoteScreenStream,
+                call.peer
+              )
             })
             call.on('close', () => {
               console.log(
                 `[PeerManager instance ${this.peer?.id}] Screen share call closed from ${call.peer}`
               )
               delete this.screenMediaConnections[call.peer]
-              // 画面共有停止を通知
-              this.options?.onReceiveScreenShareStatus?.(call.peer, false)
+              // 画面共有停止は WebSocket で通知されるのでここでは不要
+              // this.options?.onReceiveScreenShareStatus?.(call.peer, false);
             })
             call.on('error', (err) => {
               console.error(
@@ -431,7 +554,7 @@ export class PeerManager {
                 err
               )
               delete this.screenMediaConnections[call.peer]
-              this.options?.onReceiveScreenShareStatus?.(call.peer, false)
+              // this.options?.onReceiveScreenShareStatus?.(call.peer, false);
             })
             this.screenMediaConnections[call.peer] = call // 画面共有接続として保存
           } else {
@@ -439,24 +562,25 @@ export class PeerManager {
             console.log(
               `[PeerManager instance ${this.peer?.id}] Received audio call from ${call.peer}`
             )
+
             try {
-              if (!this.localStream) await this.getLocalStream() // 音声ストリーム取得
+              if (!this.localStream) await this.getLocalStream() // 音声(+ダミー映像)ストリーム取得
               if (!this.localStream) {
-                console.error(
-                  `[PeerManager instance ${this.peer?.id}] Local stream is null. Cannot answer call.`
-                )
+                console.error(/* ... */)
                 return
               }
-              call.answer(this.localStream) // 音声ストリームで応答
+
+              call.answer(this.localStream) // 音声(+ダミー映像)ストリームで応答
               call.on('stream', (remoteStream) => {
-                // このストリームは音声のはず
                 console.log(
                   `[PeerManager instance ${this.peer?.id}] Received audio stream from ${call.peer} (on call answer)`
                 )
-                this.options?.onReceiveStream(remoteStream, call.peer)
+                // ★ onRemoteStream を呼び出す
+                this.options?.onRemoteStream(remoteStream, call.peer)
                 this.startAudioAnalysis(call.peer, remoteStream)
               })
-              call.on('close', () => this.handleDisconnect(call.peer)) // 通常の切断処理
+
+              call.on('close', () => this.handleDisconnect(call.peer))
               call.on('error', (err) => {
                 console.error(
                   `[PeerManager instance ${this.peer?.id}] Audio call error with ${call.peer}:`,
@@ -570,17 +694,7 @@ export class PeerManager {
         `[PeerManager instance ${this.peer?.id}] Calling peer: ${targetId}`
       )
       const call = this.peer.call(targetId, this.localStream)
-      call.on('stream', (remoteStream) => {
-        console.log(
-          `[PeerManager instance ${this.peer?.id}] Received stream from ${targetId} (on call)`
-        )
-        if (remoteStream.getVideoTracks().length > 0) {
-          this.options?.onReceiveScreenStream(remoteStream, call.peer)
-        } else {
-          this.options?.onReceiveStream(remoteStream, call.peer)
-          this.startAudioAnalysis(call.peer, remoteStream)
-        }
-      })
+
       call.on('close', () => this.handleDisconnect(targetId))
       call.on('error', (err) => {
         console.error(
@@ -612,14 +726,15 @@ export class PeerManager {
     this.sendMessage('MUTE_STATUS', this.isMuted)
   }
 
+  // ★★★ replaceTrackForAllConnections は音声トラック専用にする (または削除しても良い) ★★★
+  // このメソッドは switchMicrophone でのみ使われる
   private async replaceTrackForAllConnections(
     newTrack: MediaStreamTrack | null,
-    kind: 'audio' | 'video' // video も受け取れるようにしておく
+    kind: 'audio'
   ) {
     // このメソッドは主に音声トラックの置換に使われる想定
     console.log(
-      `[PeerManager instance ${this.peer?.id}] Replacing ${kind} track for all connections with track:`,
-      newTrack?.id ?? 'null'
+      `[PeerManager instance ${this.peer?.id}] Replacing ${kind} track for all connections. New track info: id=${newTrack?.id}, kind=${newTrack?.kind}, readyState=${newTrack?.readyState}`
     )
     if (Object.keys(this.mediaConnections).length === 0) {
       console.log(
@@ -647,6 +762,12 @@ export class PeerManager {
             console.log(
               `[PeerManager instance ${this.peer?.id}] Attempting sender.replaceTrack() for ${peerId}...`
             )
+            // ★ newTrack が null でないか、readyState が 'live' か確認
+            if (newTrack && newTrack.readyState !== 'live') {
+              console.warn(
+                `[PeerManager instance ${this.peer?.id}] Attempting to replace with a non-live track (${newTrack.readyState}) for ${peerId}.`
+              )
+            }
             await sender.replaceTrack(newTrack)
             console.log(
               `[PeerManager instance ${this.peer?.id}] Successfully replaced ${kind} track for ${peerId}. New track: ${sender.track?.id ?? 'null'}`
@@ -654,7 +775,10 @@ export class PeerManager {
           } catch (replaceError) {
             console.error(
               `[PeerManager instance ${this.peer?.id}] Failed to replace ${kind} track for ${peerId}:`,
-              replaceError
+              replaceError,
+              // エラーオブジェクトの詳細も表示
+              replaceError instanceof Error ? replaceError.name : '',
+              replaceError instanceof Error ? replaceError.message : ''
             )
           }
         } else {
@@ -699,40 +823,37 @@ export class PeerManager {
       console.warn('[PeerManager] Screen share already active.')
       return
     }
-    console.log('[PeerManager] Starting screen share...')
+    console.log('[PeerManager] Starting screen share (Separate Call Method)...') // ログ変更
     let screenVideoTrack: MediaStreamTrack | null = null
-    let screenAudioTrack: MediaStreamTrack | null = null // ★ 音声トラック用変数
+    let screenAudioTrack: MediaStreamTrack | null = null // ★ 音声トラック用変数を復活
 
     try {
-      // ↓↓↓ audio: true を追加 ↓↓↓
+      // 1. 画面共有ストリーム（映像のみ）を取得
+      console.log('[PeerManager] Requesting screen share stream (VIDEO ONLY)')
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: true, // ★ 音声も取得する
+        audio: true,
       })
-      // ↑↑↑ audio: true を追加 ↑↑↑
 
       screenVideoTrack = this.screenStream.getVideoTracks()[0]
-      screenAudioTrack = this.screenStream.getAudioTracks()[0] // ★ 音声トラックを取得
+      screenAudioTrack = this.screenStream.getAudioTracks()[0]
 
       if (!screenVideoTrack) {
         throw new Error('No video track found in screen share stream.')
       }
       console.log('[PeerManager] Screen share stream obtained.')
       if (screenAudioTrack) {
-        console.log('[PeerManager] Screen share stream includes audio track!')
+        console.log('[PeerManager] Screen share stream includes audio track!') // ログ追加
       } else {
         console.log(
           '[PeerManager] Screen share stream does NOT include audio track.'
-        )
+        ) // ログ追加
       }
 
-      this.options?.onLocalScreenStreamUpdate?.(this.screenStream)
       // 2. 共有終了時のリスナーを設定
       this.screenShareTrackEndedListener = () => {
-        console.log(
-          `[PeerManager instance ${this.peer?.id}] Screen share track ended event received.`
-        )
-        this.stopScreenShare() // トラックが停止したら共有も停止
+        console.log(/* ... */)
+        this.stopScreenShare()
       }
       screenVideoTrack.addEventListener(
         'ended',
@@ -740,7 +861,7 @@ export class PeerManager {
       )
 
       // 3. 接続中の各ピアに画面共有用の新しい call を開始
-      const connectedPeerIds = Object.keys(this.dataConnections) // データ接続があるピアを対象とする
+      const connectedPeerIds = Object.keys(this.dataConnections)
       console.log(
         `[PeerManager instance ${this.peer?.id}] Starting screen share calls to peers:`,
         connectedPeerIds
@@ -748,96 +869,116 @@ export class PeerManager {
 
       for (const peerId of connectedPeerIds) {
         if (this.screenMediaConnections[peerId]) {
+          // ★ 既に接続があればスキップするログ
           console.warn(
             `[PeerManager instance ${this.peer?.id}] Screen share connection already exists for ${peerId}. Skipping.`
           )
           continue
         }
-
         if (!this.peer || !this.screenStream) {
+          // ★ Peer または screenStream が null の場合のエラーログ
           console.error(
-            `[PeerManager instance] Peer or screenStream became null unexpectedly before calling ${peerId}.`
+            `[PeerManager instance] Peer or screenStream became null unexpectedly before calling ${peerId} for screen share.`
           )
           continue // このピアへの処理をスキップ
         }
-
         console.log(
-          // this.peer が null でないことが保証されたので ?. を外す
-          `[PeerManager instance ${this.peer?.id}] Calling ${peerId} for screen share...`
+          `[PeerManager instance ${this.peer.id}] Calling ${peerId} for screen share...`
         )
-        // this.peer と this.screenStream が null でないことを TypeScript に伝える
+
+        // 新しい call を開始し、メタデータを付与
         const screenCall = this.peer.call(peerId, this.screenStream, {
           metadata: { type: 'screenShare' },
         })
-        // ↑↑↑ ここまで追加/修正 ↑↑↑
 
-        // screenCall のイベントハンドラ (エラーやクローズ)
         screenCall.on('close', () => {
           console.log(
             `[PeerManager instance ${this.peer?.id}] Screen share call closed with ${peerId} (initiated side).`
           )
-          delete this.screenMediaConnections[peerId]
         })
         screenCall.on('error', (err) => {
           console.error(
             `[PeerManager instance ${this.peer?.id}] Screen share call error with ${peerId} (initiated side):`,
             err
           )
-          delete this.screenMediaConnections[peerId]
         })
 
         this.screenMediaConnections[peerId] = screenCall
       }
 
-      // 4. 他のピアに画面共有開始を通知 (DataConnection経由)
-      this.sendMessage('SCREEN_SHARE_STATUS', true)
+      // 4. 他のピアに通知 (WebSocket で行うのでここでは不要)
+
+      // 5. ローカル状態更新
+      this.options?.onLocalScreenStreamUpdate?.(this.screenStream)
+
       console.log(
-        `[PeerManager instance ${this.peer?.id}] Screen sharing initiated and notified.`
+        `[PeerManager instance ${this.peer?.id}] Screen sharing initiated (Separate Call Method).` // ログ変更
       )
     } catch (error) {
-      console.error(
-        `[PeerManager instance ${this.peer?.id}] Failed to start screen share:`,
-        error
-      )
-      // エラー発生時のクリーンアップ
-      const tracksToStop = this.screenStream?.getTracks()
-      tracksToStop?.forEach((track) => track.stop())
-      this.screenStream = null
-      if (this.screenShareTrackEndedListener && screenVideoTrack) {
-        try {
-          screenVideoTrack.removeEventListener(
-            'ended',
-            this.screenShareTrackEndedListener
-          )
-        } catch (removeError) {
-          console.error("Error removing 'ended' listener:", removeError)
-        }
-      }
-      this.screenShareTrackEndedListener = null
-      // 開始に失敗した場合、確立した可能性のある screenMediaConnections も閉じる
-      Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
-      this.screenMediaConnections = {}
-      this.options?.onLocalScreenStreamUpdate?.(null)
-
-      throw error // エラーを再スロー
+      console.error(/* ... */)
+      this.cleanupScreenShareResources() // エラー時もクリーンアップを呼ぶように変更
+      throw error
     }
   }
 
   public async stopScreenShare() {
     console.log(
-      `[PeerManager instance ${this.peer?.id}] Attempting to stop screen share.`
+      `[PeerManager instance ${this.peer?.id}] Attempting to stop screen share (Separate Call Method).` // ログ変更
     )
     if (
       !this.screenStream &&
       Object.keys(this.screenMediaConnections).length === 0
     ) {
-      console.log(
-        `[PeerManager instance ${this.peer?.id}] Screen sharing is not active.`
-      )
-      return // 共有中でなければ何もしない
+      console.log(/* ... */)
+      return
     }
 
-    // 1. 'ended' リスナーを削除
+    // 1. 画面共有関連リソースのクリーンアップを呼ぶ
+    this.cleanupScreenShareResources() // これでリスナー削除、ストリーム停止、ローカル状態更新が行われる
+
+    // 2. 画面共有用の接続をすべて閉じる
+    console.log(
+      `[PeerManager instance ${this.peer?.id}] Closing all screen share connections.`
+    )
+    Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
+    this.screenMediaConnections = {} // 接続情報をクリア
+
+    // 3. 他のピアに通知 (WebSocket で行うのでここでは不要)
+    // this.sendMessage('SCREEN_SHARE_STATUS', false);
+
+    console.log(
+      `[PeerManager instance ${this.peer?.id}] Screen sharing stopped (Separate Call Method).` // ログ変更
+    )
+    // replaceTrack は不要
+  }
+
+  // ★ 音声ミキシングリソースを解放するヘルパーメソッド
+  private cleanupAudioMixingResources() {
+    if (this.audioMixingResources) {
+      console.log('[PeerManager] Cleaning up audio mixing resources...')
+      const { audioContext, micSource, screenSource, destination, mixedTrack } =
+        this.audioMixingResources
+      try {
+        mixedTrack?.stop() // 生成したトラックを停止
+        micSource?.disconnect()
+        screenSource?.disconnect()
+        destination?.disconnect()
+        // AudioContext を閉じる (非同期なのでエラーハンドリング推奨)
+        audioContext
+          ?.close()
+          .catch((e) => console.error('Error closing mixing AudioContext:', e))
+      } catch (e) {
+        console.error('Error during audio mixing resource cleanup:', e)
+      } finally {
+        this.audioMixingResources = null
+      }
+    }
+  }
+
+  // ★ 画面共有関連のリソースをまとめて解放するヘルパーメソッド
+  private cleanupScreenShareResources() {
+    console.log('[PeerManager] Cleaning up screen share resources...')
+    // 'ended' リスナー削除
     const screenVideoTrack = this.screenStream?.getVideoTracks()[0]
     if (this.screenShareTrackEndedListener && screenVideoTrack) {
       try {
@@ -851,39 +992,34 @@ export class PeerManager {
       this.screenShareTrackEndedListener = null
     }
 
-    // 2. ローカルの画面共有ストリームを停止
+    // ローカルの画面共有ストリーム停止
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = null
-    this.options?.onLocalScreenStreamUpdate?.(null)
-    // 3. 画面共有用の接続をすべて閉じる
-    console.log(
-      `[PeerManager instance ${this.peer?.id}] Closing all screen share connections.`
-    )
-    Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
-    this.screenMediaConnections = {} // 接続情報をクリア
+    this.options?.onLocalScreenStreamUpdate?.(null) // 状態更新通知
 
-    // 4. 他のピアに画面共有停止を通知
-    this.sendMessage('SCREEN_SHARE_STATUS', false)
-    console.log(
-      `[PeerManager instance ${this.peer?.id}] Screen sharing stopped and notified.`
-    )
+    // 音声ミキシングリソース解放
+    this.cleanupAudioMixingResources()
 
-    // replaceTrack や originalVideoTrack の処理は不要
+    // screenMediaConnections のクリアは不要になった
   }
 
   public disconnectAll() {
-    console.log(`[PeerManager instance ${this.peer?.id}] disconnectAll called.`)
-    this.stopScreenShare() // 画面共有停止処理を呼ぶ (内部で screenMediaConnections もクリアされる)
+    console.log(/* ... */)
+    // 1. 画面共有リソースクリーンアップ (stopScreenShare ではなくこちらを呼ぶ)
+    this.cleanupScreenShareResources()
+    // 2. 音声分析停止
     this.stopAllAudioAnalysis()
 
-    // 音声接続とデータ接続を閉じる
+    // 3. 音声接続、データ接続、画面共有接続を閉じる
     Object.values(this.mediaConnections).forEach((conn) => conn.close())
     Object.values(this.dataConnections).forEach((conn) => conn.close())
+    // ★★★ 画面共有接続も閉じる ★★★
+    Object.values(this.screenMediaConnections).forEach((conn) => conn.close())
     this.mediaConnections = {}
     this.dataConnections = {}
-    // screenMediaConnections は stopScreenShare でクリアされるのでここでは不要
+    this.screenMediaConnections = {} // ★ クリア
 
-    // Peer オブジェクト破棄
+    // 4. Peer オブジェクト破棄
     if (this.peer && !this.peer.destroyed) {
       console.log(
         `[PeerManager instance ${this.peer?.id}] Destroying peer instance.`
@@ -892,12 +1028,11 @@ export class PeerManager {
     }
     this.peer = null
 
-    // ローカルストリーム停止
+    // 5. ローカルストリーム停止 (マイク)
     this.localStream?.getTracks().forEach((track) => track.stop())
     this.localStream = null
-    // screenStream は stopScreenShare で停止されるのでここでは不要
 
-    // 他のプロパティリセット
+    // 6. 他のプロパティリセット
     this.options = null
     this.myName = ''
     this.isMuted = false

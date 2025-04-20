@@ -9,15 +9,13 @@ import type { Participant } from '../components/CallScreen'
 interface UsePeerConnectionOptions {
   roomCode: string | undefined
   myName: string
-  isMuted: boolean
   socket: Socket | null
-  onReceiveAudioStream: (stream: MediaStream, peerId: string) => void
-  onReceiveScreenStream: (stream: MediaStream, peerId: string) => void
+  onRemoteStream: (stream: MediaStream, peerId: string) => void
   onParticipantUpdate: (
     participantData: Partial<Participant> & { id: string }
   ) => void
   onParticipantRemove: (peerId: string) => void
-  onScreenShareStatusChange: (peerId: string, isSharing: boolean) => void
+  onRemoteScreenStreamUpdate: (stream: MediaStream, peerId: string) => void
 }
 
 interface UsePeerConnectionReturn {
@@ -34,13 +32,11 @@ interface UsePeerConnectionReturn {
 export function usePeerConnection({
   roomCode,
   myName,
-  isMuted,
   socket, // socket は PeerManager 内部では使わないが、接続トリガーとして依存配列に残す
-  onReceiveAudioStream,
-  onReceiveScreenStream,
+  onRemoteStream,
   onParticipantUpdate,
   onParticipantRemove,
-  onScreenShareStatusChange,
+  onRemoteScreenStreamUpdate,
 }: UsePeerConnectionOptions): UsePeerConnectionReturn {
   const [myPeerId, setMyPeerId] = useState<string>('')
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
@@ -88,21 +84,12 @@ export function usePeerConnection({
 
       try {
         const peerOptions: InitPeerOptions = {
-          roomCode: roomCode, // PeerManager 内部では使わないが一応渡す
+          roomCode: roomCode,
+
           // --- コールバックを PeerManager に渡す ---
-          onPeerOpen: (id) => {
+          onRemoteStream: (stream, peerId) => {
             // ★ Ref がクリアされていたら (クリーンアップ後) 何もしない
-            if (!peerManagerRef.current) return
-            console.log(
-              `[usePeerConnection useEffect ${effectInstanceId}] Peer opened: ${id}`
-            )
-            setMyPeerId(id)
-            onParticipantUpdate({
-              id,
-              name: myName,
-              isMuted: isMuted,
-              isSelf: true,
-            })
+            if (peerManagerRef.current) onRemoteStream(stream, peerId)
           },
           onLocalStream: (stream) => {
             if (!peerManagerRef.current) return
@@ -112,13 +99,24 @@ export function usePeerConnection({
             setLocalStream(stream)
             // ミュート状態の適用は PeerManager 内部で行われる
           },
+          onPeerOpen: (id) => {
+            // Ref がクリアされていたら何もしない
+            if (!peerManagerRef.current) return
+            console.log(
+              `[usePeerConnection useEffect ${effectInstanceId}] Peer opened via callback: ${id}`
+            )
+            setMyPeerId(id)
+            // 親コンポーネント (CallScreen) に自分の参加者情報を通知/更新
+            onParticipantUpdate({
+              id,
+              name: myName,
+              isMuted: false, // 現在の isMuted state を渡す
+              isSelf: true,
+            })
+          },
+
           // ★ 他のコールバックも同様に Ref チェックを追加 (より安全に)
-          onReceiveStream: (stream, peerId) => {
-            if (peerManagerRef.current) onReceiveAudioStream(stream, peerId)
-          },
-          onReceiveScreenStream: (stream, peerId) => {
-            if (peerManagerRef.current) onReceiveScreenStream(stream, peerId)
-          },
+
           onReceiveUserName: (peerId, name) => {
             if (peerManagerRef.current)
               onParticipantUpdate({ id: peerId, name })
@@ -134,10 +132,11 @@ export function usePeerConnection({
             if (peerManagerRef.current)
               onParticipantUpdate({ id: peerId, isSpeaking })
           },
-          onReceiveScreenShareStatus: (peerId, isSharing) => {
-            if (peerManagerRef.current)
-              onScreenShareStatusChange(peerId, isSharing)
-          },
+          // onReceiveScreenShareStatus: (peerId, isSharing) => {
+          //   if (peerManagerRef.current)
+          //     onScreenShareStatusChange(peerId, isSharing)
+          // },
+          onReceiveScreenShareStatus: undefined,
 
           onLocalScreenStreamUpdate: (stream) => {
             console.log(
@@ -147,10 +146,20 @@ export function usePeerConnection({
             // PeerManager から screenStream (または null) を受け取ったら State を更新
             setScreenStream(stream)
           },
+          onRemoteScreenStreamUpdate: (stream, peerId) => {
+            if (peerManagerRef.current)
+              onRemoteScreenStreamUpdate(stream, peerId)
+          },
         }
-
+        console.log('[usePeerConnection useEffect] PeerManager options:', {
+          onRemoteStreamExists: !!peerOptions.onRemoteStream, // peerOptions を参照
+          onRemoteScreenStreamUpdateExists:
+            !!peerOptions.onRemoteScreenStreamUpdate, // peerOptions を参照
+          onLocalScreenStreamUpdateExists:
+            !!peerOptions.onLocalScreenStreamUpdate,
+        })
         // ★ インスタンスの initPeer メソッドを呼び出す
-        await pm.initPeer(peerOptions, myName, isMuted)
+        await pm.initPeer(peerOptions, myName, false)
 
         // ★ 成功しても Ref がクリアされていたら (クリーンアップ後) 何もしない
         if (!peerManagerRef.current) {
@@ -204,12 +213,6 @@ export function usePeerConnection({
     roomCode,
     myName,
     socket,
-    // コールバック関数は useCallback でメモ化されている前提
-    onReceiveAudioStream,
-    onReceiveScreenStream,
-    onParticipantUpdate,
-    onParticipantRemove,
-    onScreenShareStatusChange,
   ])
 
   // --- PeerManager インスタンスのメソッドをラップ ---

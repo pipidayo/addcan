@@ -102,7 +102,45 @@ io.on('connection', (socket) => {
       )
     }
   })
-  // ★★★ ここまで追加 ★★★
+
+  // 画面共有ステータス変更イベント
+  socket.on('screen-share-status', (payload) => {
+    // payload の形式はクライアント側と合わせる (例: { isSharing: boolean })
+    const isSharing = payload?.isSharing // isSharing プロパティを取得
+    const peerId = socket.currentPeerId
+    const roomCode = socket.currentRoomCode
+
+    // 必要な情報が揃っているか確認
+    if (
+      typeof isSharing !== 'boolean' ||
+      !peerId ||
+      !roomCode ||
+      !rooms[roomCode]
+    ) {
+      console.warn(
+        '[Server screen-share-status] Invalid payload or user not in room:',
+        {
+          payload,
+          peerId,
+          roomCode,
+        }
+      )
+      return
+    }
+
+    console.log(
+      `[Server screen-share-status] Received from ${peerId} in room ${roomCode}. Payload:`,
+      payload
+    )
+
+    // 他の参加者に通知 (自分自身を除く)
+    const broadcastPayload = { peerId, isSharing }
+    console.log(
+      `[Server screen-share-status] Broadcasting to room ${roomCode}. Payload:`,
+      broadcastPayload
+    )
+    socket.to(roomCode).emit('screen-share-status', broadcastPayload)
+  })
 
   // 切断イベント
   socket.on('disconnect', () => {
@@ -125,6 +163,8 @@ io.on('connection', (socket) => {
         console.log(
           `[Server disconnect] Removing ${peerId} (${rooms[roomCode][peerId]}) from room ${roomCode}`
         )
+        const wasSharing = rooms[roomCode][peerId]?.isScreenSharing // 退出前に共有していたか（もし状態を持たせるなら）
+
         delete rooms[roomCode][peerId] // 部屋からユーザーを削除
 
         // 他の参加者に退出を通知
@@ -133,6 +173,18 @@ io.on('connection', (socket) => {
           { peerId }
         )
         io.to(roomCode).emit('user-left', { peerId })
+
+        //  もし退出した人が画面共有中だったら、それも通知
+        if (wasSharing) {
+          // この wasSharing を取得するには、rooms[roomCode][peerId] に isScreenSharing 状態を持たせる必要がある
+          console.log(
+            `[Server disconnect] Broadcasting screen share stop because ${peerId} left room ${roomCode}.`
+          )
+          io.to(roomCode).emit('screen-share-status', {
+            peerId,
+            isSharing: false,
+          })
+        }
 
         // 部屋に誰もいなくなったら部屋を削除
         if (Object.keys(rooms[roomCode]).length === 0) {
