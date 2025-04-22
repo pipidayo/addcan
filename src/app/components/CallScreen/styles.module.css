@@ -214,8 +214,6 @@
   border-radius: 2px;
   cursor: pointer;
   border: none; /* Firefox はボーダーをリセット */
-  /* box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); */
-  /* transition: transform 0.1s ease; */
 }
 
 .selfParticipant .muteIcon {
