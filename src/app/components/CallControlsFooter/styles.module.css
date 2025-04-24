@@ -215,7 +215,6 @@
 .roomCodeContainerFooter {
   display: flex;
   align-items: center;
-  /* ★ margin-right を削除 */
 }
 .roomLabelFooter {
   font-size: 0.9rem;
