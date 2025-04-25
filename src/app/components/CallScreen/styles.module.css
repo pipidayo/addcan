@@ -200,8 +200,7 @@
   height: 14px; /* 高さを少し出す */
   /* ★ 背景色を控えめな色に */
   background: rgba(255, 255, 255, 0.4); /* 例: 半透明の白 */
-  /* background: rgba(var(--accent-color-primary-rgb), 0.3); */ /* 例: 非常に薄い紫 */
-  /* ★ 角丸を調整 */
+
   border-radius: 2px;
   cursor: pointer;
 }
