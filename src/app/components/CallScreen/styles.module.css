@@ -195,12 +195,9 @@
 /* ★ スライダーのつまみ (Chrome, Edge, Safari) */
 .volumeSlider::-webkit-slider-thumb {
   appearance: none;
-  /* ★ サイズをトラックに合わせるか、少しだけ大きく */
   width: 6px;
   height: 14px; /* 高さを少し出す */
-  /* ★ 背景色を控えめな色に */
   background: rgba(255, 255, 255, 0.4); /* 例: 半透明の白 */
-
   border-radius: 2px;
   cursor: pointer;
 }
