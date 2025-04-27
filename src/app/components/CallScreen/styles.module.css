@@ -144,7 +144,6 @@
   color: rgba(var(--accent-color-speaking-rgb), 1);
   flex-shrink: 0;
   margin-left: px;
-  /* ★ (任意) サイズを固定してレイアウトずれを防ぐ */
   width: 1.2em;
   height: 1.2em;
   display: flex;
