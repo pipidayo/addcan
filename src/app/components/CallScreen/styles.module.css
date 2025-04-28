@@ -81,7 +81,6 @@
   padding: 14px 20px; /* パディングを少し調整 */
   border-radius: var(--border-radius); /* :root の値を参照 */
   /* ★ デフォルトの影を削除 (または :root で調整) */
-  /* box-shadow: var(--shadow); */
   display: flex;
   flex-direction: column;
   gap: 8px; /* 名前エリアと音量バーの間隔を少し詰める */
