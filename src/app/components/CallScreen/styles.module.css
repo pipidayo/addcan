@@ -23,9 +23,6 @@
   --button-bg-disabled-rgba: 229, 231, 235, 0.4;
   --button-text-disabled: #9ca3af;
 
-  /* 背景 */
-  /* --bg-self-rgba, --bg-other-rgba は未使用 */
-
   /* ボーダー色 */
   --border-color-base: rgba(0, 0, 0, 0.05);
   --border-color-button: rgba(var(--accent-color-primary-rgb), 0.3);
