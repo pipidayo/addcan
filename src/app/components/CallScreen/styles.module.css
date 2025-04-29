@@ -28,7 +28,6 @@
 
   /* ボーダー色 */
   --border-color-base: rgba(0, 0, 0, 0.05);
-  /* --border-color-self は未使用 */
   --border-color-button: rgba(var(--accent-color-primary-rgb), 0.3);
   --border-color-button-hover: rgba(var(--accent-color-primary-rgb), 0.4);
   --border-color-disabled: rgba(209, 213, 219, 0.5);
