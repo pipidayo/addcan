@@ -1,4 +1,20 @@
 :root {
+  /* トーストの背景色 (例: 少し薄めの紫) */
+  --toastify-color-light: #ede9fe; /* Tailwind の violet-100 */
+  /* トーストの文字色 (例: 濃い紫) */
+  --toastify-text-color-light: #5b21b6; /* Tailwind の violet-700 */
+  /* プログレスバーの色 (例: 標準的な紫) */
+  --toastify-color-progress-light: #8b5cf6; /* Tailwind の violet-500 */
+
+  /* アイコンの色も合わせる (オプション) */
+  --toastify-icon-color-info: var(--toastify-color-progress-light);
+  --toastify-icon-color-success: #10b981; /* 例: 緑系 */
+  --toastify-icon-color-warning: #f59e0b; /* 例: オレンジ系 */
+  --toastify-icon-color-error: #ef4444; /* 例: 赤系 */
+
+  /* 角丸の調整 (オプション) */
+  --toastify-toast-border-radius: 8px; /* 例: 少し丸くする */
+
   /* 色 (基本) */
   --text-color-on-light-bg: #111827; /* 濃いグレー */
   --text-color-on-dark-bg: #ffffff; /* 白 */

@@ -7,6 +7,7 @@ import io, { Socket } from 'socket.io-client'
 import CallControlsFooter from '../CallControlsFooter'
 import { usePeerConnection } from '@/app/hooks/usePeerConnection'
 import { FiMicOff, FiMonitor } from 'react-icons/fi'
+import { toast } from 'react-toastify'
 
 // WebSocket サーバーの URL
 const WEBSOCKET_SERVER_URL =
@@ -524,7 +525,7 @@ export default function CallScreen() {
       }
     } else {
       if (screenSharingPeerId !== null) {
-        alert('現在他のユーザーが画面共有中です。')
+        toast('現在他のユーザーが画面共有中です。')
         return
       }
       try {
