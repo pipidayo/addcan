@@ -1,11 +1,10 @@
 // src/app/hooks/usePeerConnection.ts
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
-// ★ PeerManager クラスと InitPeerOptions 型をインポート
 import { PeerManager, type InitPeerOptions } from '../components/PeerManager'
 import type { Participant } from '../components/CallScreen'
 
-// --- インターフェース定義 (変更なし) ---
+// --- インターフェース定義  ---
 interface UsePeerConnectionOptions {
   roomCode: string | undefined
   myName: string
@@ -49,7 +48,14 @@ export function usePeerConnection({
   useEffect(() => {
     const effectInstanceId = Math.random().toString(36).substring(7)
     console.log(
-      `[usePeerConnection useEffect ${effectInstanceId}] Running effect.`
+      `[usePeerConnection useEffect ${effectInstanceId}] Running effect. Dependencies:`,
+      {
+        // 依存配列に入っている値をログに出力
+        roomCode,
+        myName,
+        socket_connected: socket?.connected, // socket オブジェクト自体ではなく接続状態
+        // 必要であれば他の依存関係も追加 (onRemoteStream などは関数なので比較が難しい)
+      }
     )
 
     // --- 初期化関数 ---
@@ -115,6 +121,9 @@ export function usePeerConnection({
             })
           },
 
+          // ★★★ サーバーへの join-room 送信は CallScreen 側で行う想定 ★★★
+          // ここで join-room を送ると、myPeerId が確定する前に送られる可能性がある
+
           // ★ 他のコールバックも同様に Ref チェックを追加 (より安全に)
 
           onReceiveUserName: (peerId, name) => {
@@ -132,23 +141,20 @@ export function usePeerConnection({
             if (peerManagerRef.current)
               onParticipantUpdate({ id: peerId, isSpeaking })
           },
-          // onReceiveScreenShareStatus: (peerId, isSharing) => {
-          //   if (peerManagerRef.current)
-          //     onScreenShareStatusChange(peerId, isSharing)
-          // },
-          onReceiveScreenShareStatus: undefined,
 
-          onLocalScreenStreamUpdate: (stream) => {
-            console.log(
-              '[usePeerConnection] Received local screen stream update from PeerManager',
-              stream
-            )
-            // PeerManager から screenStream (または null) を受け取ったら State を更新
-            setScreenStream(stream)
-          },
           onRemoteScreenStreamUpdate: (stream, peerId) => {
             if (peerManagerRef.current)
               onRemoteScreenStreamUpdate(stream, peerId)
+          },
+          onLocalScreenStreamUpdate: (stream) => {
+            console.log(
+              '[usePeerConnection] Received local screen stream update from PeerManager via callback',
+              stream?.id // ストリームがあればIDを出力
+            )
+            // Ref がクリアされていたら何もしない (念のため)
+            if (!peerManagerRef.current) return
+            // PeerManager から screenStream (または null) を受け取ったら State を更新
+            setScreenStream(stream)
           },
         }
         console.log('[usePeerConnection useEffect] PeerManager options:', {
@@ -158,6 +164,7 @@ export function usePeerConnection({
           onLocalScreenStreamUpdateExists:
             !!peerOptions.onLocalScreenStreamUpdate,
         })
+
         // ★ インスタンスの initPeer メソッドを呼び出す
         await pm.initPeer(peerOptions, myName, false)
 
@@ -212,7 +219,7 @@ export function usePeerConnection({
     // 依存配列: これらの値が変わったら再接続が必要
     roomCode,
     myName,
-    socket,
+    socket?.connected,
   ])
 
   // --- PeerManager インスタンスのメソッドをラップ ---
@@ -247,29 +254,88 @@ export function usePeerConnection({
 
   const startScreenShare = useCallback(async () => {
     if (!peerManagerRef.current) throw new Error('PeerManager not initialized')
+    if (!socket) throw new Error('Socket not connected') // socket 接続確認
+
+    console.log(
+      '[usePeerConnection] Requesting screen share permission from server...'
+    )
+
     try {
-      console.log('[usePeerConnection] Starting screen share')
+      // サーバーに共有開始リクエストを送信し、応答を待つ (Promise 化)
+      const response = await new Promise<{
+        success: boolean
+        message?: string
+      }>((resolve) => {
+        // タイムアウト処理を追加 (例: 10秒)
+        const timeoutId = setTimeout(() => {
+          console.error('[usePeerConnection] request-start-share timed out.')
+          resolve({ success: false, message: 'Server response timed out.' })
+        }, 10000) // 10秒
+
+        socket.emit(
+          'request-start-share',
+          (res: { success: boolean; message?: string }) => {
+            clearTimeout(timeoutId) // タイムアウトをクリア
+            console.log(
+              '[usePeerConnection] Received response for request-start-share:',
+              res
+            )
+            resolve(res)
+          }
+        )
+      })
+
+      // サーバーから許可が得られなかった場合
+      if (!response.success) {
+        console.warn(
+          '[usePeerConnection] Screen share denied by server:',
+          response.message
+        )
+        // ユーザーに分かりやすいエラーメッセージを投げる
+        throw new Error(response.message || '他のユーザーが画面共有中です。')
+      }
+
+      // 許可が得られたら PeerManager の共有開始処理を呼び出す
+      console.log(
+        '[usePeerConnection] Screen share allowed by server. Starting PeerManager share...'
+      )
       await peerManagerRef.current.startScreenShare()
-      // PeerManager 側で onLocalScreenStreamUpdate が呼ばれる想定
+      console.log('[usePeerConnection] PeerManager startScreenShare finished.')
+      // 成功した場合、UI 更新は onLocalScreenStreamUpdate コールバック経由で行われる
     } catch (error) {
       console.error('[usePeerConnection] Failed to start screen share:', error)
       setScreenStream(null) // エラー時は念のためクリア
+      // エラーを再スローして呼び出し元 (CallScreen) で処理できるようにする
       throw error
     }
-  }, [])
+  }, [socket]) // ★ socket を依存配列に追加
 
   const stopScreenShare = useCallback(async () => {
     if (!peerManagerRef.current) return
+
     try {
-      console.log('[usePeerConnection] Stopping screen share')
-      await peerManagerRef.current.stopScreenShare()
-      // PeerManager 側で onLocalScreenStreamUpdate(null) が呼ばれる想定
+      console.log(
+        '[usePeerConnection] Stopping screen share via PeerManager...'
+      )
+      await peerManagerRef.current.stopScreenShare() // PeerManager の停止処理を先に呼ぶ
+      console.log('[usePeerConnection] PeerManager stopScreenShare finished.')
+
+      // サーバーに共有停止を通知 (socket があれば)
+      if (socket) {
+        console.log('[usePeerConnection] Notifying server of stop share...')
+        socket.emit('notify-stop-share')
+      } else {
+        console.warn(
+          '[usePeerConnection stopScreenShare] Socket not connected, could not notify server.'
+        )
+      }
     } catch (error) {
       console.error('[usePeerConnection] Failed to stop screen share:', error)
     } finally {
-      setScreenStream(null) // 停止時は確実にクリア
+      // 停止時は UI の screenStream state を確実にクリア
+      setScreenStream(null)
     }
-  }, [])
+  }, [socket]) // ★ socket を依存配列に追加
 
   return {
     myPeerId,

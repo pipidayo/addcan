@@ -21,7 +21,7 @@ io.on('connection', (socket) => {
   socket.currentPeerId = null
   socket.currentRoomCode = null
 
-  // ルーム参加イベント
+  // --- ルーム参加イベント ---
   socket.on('join-room', ({ roomCode, peerId, name }) => {
     if (!roomCode || !peerId || !name) {
       console.warn('[Server] Invalid join-room payload:', {
@@ -35,31 +35,35 @@ io.on('connection', (socket) => {
       `[Server] Received join-room from ${peerId} for room ${roomCode}`
     )
 
-    // socket に情報を記録
     socket.currentPeerId = peerId
     socket.currentRoomCode = roomCode
 
     // 部屋が存在しなければ作成
     if (!rooms[roomCode]) {
-      rooms[roomCode] = {}
+      // ★ 部屋の初期構造を変更 ★
+      rooms[roomCode] = {
+        participants: {},
+        sharerPeerId: null, // 共有者は最初はいない
+      }
       console.log(`[Server] Room created: ${roomCode}`)
     }
 
+    const room = rooms[roomCode] // 以降 room 変数を使用
+
     // 既存の参加者リストを取得 (自分自身を除く)
-    const existingParticipants = { ...rooms[roomCode] }
+    const existingParticipants = { ...room.participants } // ★ participants から取得
     console.log(
       `[Server join-room] Preparing 'existing-participants' for ${peerId}. Data:`,
       JSON.stringify(existingParticipants)
     )
 
-    // 部屋に参加 & 参加者を追加/更新
     socket.join(roomCode)
-    // 既に同じ Peer ID があれば名前を更新、なければ追加
-    rooms[roomCode][peerId] = name
+    // 参加者を追加/更新
+    room.participants[peerId] = name // ★ participants に追加
     console.log(`${name} (${peerId}) joined/updated room: ${roomCode}`)
     console.log(
       '[Server join-room] Current rooms state AFTER join:',
-      JSON.stringify(rooms)
+      JSON.stringify(rooms) // デバッグ用に rooms 全体を出力
     )
 
     // 他の参加者に通知 (自分自身を除く)
@@ -67,85 +71,139 @@ io.on('connection', (socket) => {
       `[Server join-room] Broadcasting 'user-joined' to room ${roomCode}. Payload:`,
       { peerId, name }
     )
-    socket.to(roomCode).emit('user-joined', { peerId, name }) // socket.to() は自分以外の全員に送信
+    socket.to(roomCode).emit('user-joined', { peerId, name })
 
-    // 参加者に既存の参加者リストを送信 (自分自身を除外したリストを送信)
-    const participantsToSend = { ...existingParticipants } // コピーを作成
+    // 参加者に既存の参加者リストと現在の共有者IDを送信
+    const participantsToSend = { ...existingParticipants }
     console.log(
       `[Server join-room] Sending 'existing-participants' to ${peerId}. Payload:`,
-      JSON.stringify(participantsToSend)
+      JSON.stringify({
+        participants: participantsToSend,
+        currentSharerId: room.sharerPeerId,
+      }) // ★ currentSharerId も送信
     )
-    socket.emit('existing-participants', participantsToSend)
+    // ★ イベント名を変更 (またはクライアント側でペイロードを調整)
+    socket.emit('room-state', {
+      // 'existing-participants' から変更
+      participants: participantsToSend,
+      currentSharerId: room.sharerPeerId,
+    })
   })
 
   // ★★★ ここから追加: 部屋存在確認イベント ★★★
   socket.on('check-room-exists', ({ roomCode }, callback) => {
     if (!roomCode) {
-      // roomCode がなければ false を返す
-      if (typeof callback === 'function') {
-        callback({ exists: false })
-      }
+      if (typeof callback === 'function') callback({ exists: false })
       return
     }
-    // rooms オブジェクトに roomCode が存在するか確認 (rooms[roomCode] が undefined でないか)
-    const roomExists = rooms.hasOwnProperty(roomCode) // hasOwnProperty を使う方がより安全
+    const roomExists = rooms.hasOwnProperty(roomCode)
     console.log(
       `[Server check-room-exists] Room ${roomCode} exists: ${roomExists}`
     )
-    // 結果をコールバックでクライアントに返す
     if (typeof callback === 'function') {
       callback({ exists: roomExists })
     } else {
-      // コールバックがない場合 (念のためログ)
       console.warn(
         `[Server check-room-exists] No callback provided for room check: ${roomCode}`
       )
     }
   })
 
-  // 画面共有ステータス変更イベント
-  socket.on('screen-share-status', (payload) => {
-    // payload の形式はクライアント側と合わせる (例: { isSharing: boolean })
-    const isSharing = payload?.isSharing // isSharing プロパティを取得
+  // --- ★ 画面共有開始リクエスト ---
+  socket.on('request-start-share', (callback) => {
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
 
-    // 必要な情報が揃っているか確認
-    if (
-      typeof isSharing !== 'boolean' ||
-      !peerId ||
-      !roomCode ||
-      !rooms[roomCode]
-    ) {
-      console.warn(
-        '[Server screen-share-status] Invalid payload or user not in room:',
-        {
-          payload,
-          peerId,
-          roomCode,
-        }
-      )
+    // 部屋に参加しているか、情報が正しいか確認
+    if (!roomCode || !peerId || !rooms[roomCode]) {
+      console.warn('[Server request-start-share] User not in a valid room:', {
+        peerId,
+        roomCode,
+      })
+      if (typeof callback === 'function') {
+        // callback が関数か確認してから呼ぶ
+        callback({ success: false, message: 'Not in a valid room.' })
+      }
       return
     }
 
-    console.log(
-      `[Server screen-share-status] Received from ${peerId} in room ${roomCode}. Payload:`,
-      payload
-    )
+    const room = rooms[roomCode]
 
-    // 他の参加者に通知 (自分自身を除く)
-    const broadcastPayload = { peerId, isSharing }
-    console.log(
-      `[Server screen-share-status] Broadcasting to room ${roomCode}. Payload:`,
-      broadcastPayload
-    )
-    socket.to(roomCode).emit('screen-share-status', broadcastPayload)
+    if (room.sharerPeerId === null) {
+      // 誰も共有していない -> 共有開始OK
+      room.sharerPeerId = peerId // 共有者IDを設定
+      console.log(
+        `[Server request-start-share] User ${peerId} allowed to share in room ${roomCode}.`
+      )
+      console.log(
+        `[Server request-start-share] Calling callback with success: true for ${peerId}`
+      )
+
+      // 共有開始を許可する応答を返す
+      if (typeof callback === 'function') callback({ success: true })
+      // 部屋の全員に通知 (新しい共有者情報をブロードキャスト)
+      io.to(roomCode).emit('screen-share-status', {
+        peerId: peerId, // 誰が共有を開始したか
+        isSharing: true, // 共有が開始されたこと
+        sharerPeerId: peerId, // 現在の共有者ID (冗長かもしれないが明確化のため)
+      })
+    } else {
+      // 既に誰かが共有中 -> 共有開始NG
+      console.log(
+        `[Server request-start-share] User ${peerId} denied sharing in room ${roomCode} (Already shared by ${room.sharerPeerId}).`
+      )
+      console.log(
+        `[Server request-start-share] Calling callback with success: false for ${peerId}`
+      )
+
+      // 共有開始を拒否する応答を返す
+      if (typeof callback === 'function')
+        callback({
+          success: false,
+          message: 'Another user is already sharing.',
+        })
+    }
   })
 
-  // 切断イベント
+  // --- ★ 画面共有停止通知 ---
+  socket.on('notify-stop-share', () => {
+    const peerId = socket.currentPeerId
+    const roomCode = socket.currentRoomCode
+
+    // 部屋に参加しているか、情報が正しいか確認
+    if (!roomCode || !peerId || !rooms[roomCode]) {
+      console.warn('[Server notify-stop-share] User not in a valid room:', {
+        peerId,
+        roomCode,
+      })
+      return
+    }
+
+    const room = rooms[roomCode]
+
+    if (room.sharerPeerId === peerId) {
+      // 自分が共有者だった場合 -> 停止処理
+      console.log(
+        `[Server notify-stop-share] User ${peerId} stopped sharing in room ${roomCode}.`
+      )
+      room.sharerPeerId = null // 共有者IDをリセット
+      // 部屋の全員に通知 (共有が停止したことをブロードキャスト)
+      io.to(roomCode).emit('screen-share-status', {
+        peerId: peerId, // 誰が共有を停止したか
+        isSharing: false, // 共有が停止されたこと
+        sharerPeerId: null, // 現在の共有者ID
+      })
+    } else {
+      // 共有者でないのに停止通知が来た場合 (基本的には起こらないはずだがログ)
+      console.warn(
+        `[Server notify-stop-share] User ${peerId} tried to stop sharing in room ${roomCode}, but current sharer is ${room.sharerPeerId}.`
+      )
+    }
+  })
+
+  // --- 切断イベント ---
   socket.on('disconnect', () => {
     console.log(`[Server] disconnect event for socket ID: ${socket.id}`)
-    // socket に記録された情報を使用
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
 
@@ -159,35 +217,44 @@ io.on('connection', (socket) => {
 
     // ユーザーが部屋に参加していた場合のみ処理
     if (roomCode && peerId && rooms[roomCode]) {
-      if (rooms[roomCode][peerId]) {
-        console.log(
-          `[Server disconnect] Removing ${peerId} (${rooms[roomCode][peerId]}) from room ${roomCode}`
-        )
-        const wasSharing = rooms[roomCode][peerId]?.isScreenSharing // 退出前に共有していたか（もし状態を持たせるなら）
+      const room = rooms[roomCode] // room 変数を使用
 
-        delete rooms[roomCode][peerId] // 部屋からユーザーを削除
+      if (room.participants[peerId]) {
+        // ★ participants を確認
+        console.log(
+          `[Server disconnect] Removing ${peerId} (${room.participants[peerId]}) from room ${roomCode}`
+        )
+
+        // ★ 共有者だったかどうかをチェック ★
+        const wasSharing = room.sharerPeerId === peerId
+
+        delete room.participants[peerId] // ★ participants から削除
 
         // 他の参加者に退出を通知
         console.log(
           `[Server disconnect] Broadcasting 'user-left' to room ${roomCode}. Payload:`,
           { peerId }
         )
-        io.to(roomCode).emit('user-left', { peerId })
+        // io.to(roomCode).emit('user-left', { peerId }) // { peerId } オブジェクトではなく peerId 文字列を送る方が一般的かも？クライアントの実装に合わせる
+        io.to(roomCode).emit('user-left', peerId) // Peer ID 文字列を送信
 
-        //  もし退出した人が画面共有中だったら、それも通知
+        // ★ もし退出した人が画面共有中だったら、それも通知 ★
         if (wasSharing) {
-          // この wasSharing を取得するには、rooms[roomCode][peerId] に isScreenSharing 状態を持たせる必要がある
           console.log(
-            `[Server disconnect] Broadcasting screen share stop because ${peerId} left room ${roomCode}.`
+            `[Server disconnect] Broadcasting screen share stop because sharer ${peerId} left room ${roomCode}.`
           )
+          room.sharerPeerId = null // 共有者IDをリセット
+          // 部屋の全員に通知
           io.to(roomCode).emit('screen-share-status', {
-            peerId,
-            isSharing: false,
+            peerId: peerId, // 誰の共有が停止したか
+            isSharing: false, // 停止したこと
+            sharerPeerId: null, // 現在の共有者ID
           })
         }
 
         // 部屋に誰もいなくなったら部屋を削除
-        if (Object.keys(rooms[roomCode]).length === 0) {
+        if (Object.keys(room.participants).length === 0) {
+          // ★ participants を確認
           console.log(
             `[Server disconnect] Room ${roomCode} is empty, deleting room.`
           )
@@ -195,7 +262,7 @@ io.on('connection', (socket) => {
         }
       } else {
         console.warn(
-          `[Server disconnect] Peer ID ${peerId} not found in room ${roomCode} upon disconnect.`
+          `[Server disconnect] Peer ID ${peerId} not found in room ${roomCode} participants upon disconnect.`
         )
       }
     } else {

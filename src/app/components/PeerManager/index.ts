@@ -960,11 +960,22 @@ export class PeerManager {
       // 5. 接続中の各ピアに画面共有用の新しい call を開始
       const connectedPeerIds = Object.keys(this.dataConnections)
       console.log(
-        `[PeerManager instance ${this.peer?.id}] Starting screen share calls to peers:`,
+        `[PeerManager instance ${this.peer?.id}] Starting screen share calls to peers (DataConnections):`,
         connectedPeerIds
       )
 
       for (const peerId of connectedPeerIds) {
+        const dataConnection = this.dataConnections[peerId] // データ接続を取得
+
+        // ↓↓↓↓↓↓ この確認処理を追加・修正 ↓↓↓↓↓↓
+        // ★★★ データ接続が開いているか確認 ★★★
+        if (!dataConnection || !dataConnection.open) {
+          console.warn(
+            `[PeerManager instance ${this.peer?.id}] Data connection to ${peerId} is not open. Skipping screen share call.`
+          )
+          continue // 接続が開いていなければ次のピアへ
+        }
+
         if (this.screenMediaConnections[peerId]) {
           console.warn(
             `[PeerManager instance ${this.peer?.id}] Screen share connection already exists for ${peerId}. Skipping.`
@@ -1019,6 +1030,12 @@ export class PeerManager {
       }
 
       // 6. ローカル状態更新 (ローカルプレビュー用には元の screenStream を渡す)
+      console.log(
+        '[PeerManager startScreenShare] Calling onLocalScreenStreamUpdate callback...',
+        this.options?.onLocalScreenStreamUpdate
+          ? 'Callback exists'
+          : 'Callback missing'
+      )
       this.options?.onLocalScreenStreamUpdate?.(this.screenStream)
 
       console.log(
@@ -1112,6 +1129,13 @@ export class PeerManager {
     // ローカルの画面共有ストリーム停止
     this.screenStream?.getTracks().forEach((track) => track.stop())
     this.screenStream = null
+    console.log(
+      '[PeerManager cleanupScreenShareResources] Calling onLocalScreenStreamUpdate(null) callback...',
+      this.options?.onLocalScreenStreamUpdate
+        ? 'Callback exists'
+        : 'Callback missing'
+    )
+
     this.options?.onLocalScreenStreamUpdate?.(null) // 状態更新通知
 
     // 音声ミキシングリソース解放
