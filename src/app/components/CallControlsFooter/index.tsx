@@ -31,6 +31,7 @@ interface CallControlsFooterProps {
   roomCode: string | undefined
   screenVolume: number
   handleScreenVolumeChange: (volume: number) => void
+  isScreenShareButtonDisabled: boolean
 }
 
 export default function CallControlsFooter({
@@ -52,6 +53,7 @@ export default function CallControlsFooter({
   roomCode,
   screenVolume,
   handleScreenVolumeChange,
+  isScreenShareButtonDisabled,
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
@@ -186,6 +188,7 @@ export default function CallControlsFooter({
           onClick={toggleScreenShare}
           className={`${styles.controlButton} ${isScreenSharing ? styles.activeStateButton : ''}`}
           title={isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
+          disabled={isScreenShareButtonDisabled}
         >
           <FiMonitor />
         </button>

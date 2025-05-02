@@ -8,6 +8,7 @@ import CallControlsFooter from '../CallControlsFooter'
 import { usePeerConnection } from '@/app/hooks/usePeerConnection'
 import { FiMicOff, FiMonitor } from 'react-icons/fi'
 import { toast } from 'react-toastify'
+import ParticipantList from '../ParticipantList'
 
 // WebSocket サーバーの URL
 const WEBSOCKET_SERVER_URL =
@@ -66,9 +67,7 @@ export default function CallScreen() {
   const [socketInstance, setSocketInstance] = useState<Socket | null>(null)
   const [myName] = useState(() => localStorage.getItem('my_name') || '')
   const [participants, setParticipants] = useState<Participant[]>([])
-  const audioRefs = useRef<{ [id: string]: HTMLAudioElement }>({})
   const [isMuted, setIsMuted] = useState(false)
-  const myPeerIdRef = useRef<string>('') // myPeerIdFromHook があるので不要かも
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
   const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([])
   const [selectedMicId, setSelectedMicId] = useState<string>('')
@@ -83,10 +82,6 @@ export default function CallScreen() {
   const [participantVolumes, setParticipantVolumes] = useState<{
     [id: string]: number
   }>({})
-  const participantVolumesRef = useRef(participantVolumes)
-  useEffect(() => {
-    participantVolumesRef.current = participantVolumes
-  }, [participantVolumes])
 
   const localSpeakingThreshold = 10
 
@@ -99,10 +94,7 @@ export default function CallScreen() {
     useState<MediaStream | null>(null)
   const localScreenPreviewRef = useRef<HTMLVideoElement>(null)
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('')
-  const selectedSpeakerIdRef = useRef(selectedSpeakerId)
-  useEffect(() => {
-    selectedSpeakerIdRef.current = selectedSpeakerId
-  }, [selectedSpeakerId])
+
   const [screenVolume, setScreenVolume] = useState(0.7)
 
   const [pendingScreenStreams, setPendingScreenStreams] = useState<{
@@ -149,10 +141,6 @@ export default function CallScreen() {
 
   const handleVolumeChange = useCallback((peerId: string, volume: number) => {
     setParticipantVolumes((prev) => ({ ...prev, [peerId]: volume }))
-    const audioElement = audioRefs.current[peerId]
-    if (audioElement) {
-      audioElement.volume = volume
-    }
   }, [])
 
   const handleReceiveStream = useCallback(
@@ -215,7 +203,8 @@ export default function CallScreen() {
       setParticipants((prev) => {
         const existingIndex = prev.findIndex((p) => p.id === participantData.id)
         // ↓ isSelf の判定を myPeerIdFromHook を使って行う
-        const isSelf = participantData.id === myPeerIdFromHook
+        const isSelf =
+          participantData.isSelf ?? participantData.id === myPeerIdFromHook
 
         if (existingIndex !== -1) {
           // 既存参加者の情報を更新
@@ -444,15 +433,6 @@ export default function CallScreen() {
       const newSpeakerId = event.target.value
       console.log('Selected Speaker ID:', newSpeakerId)
       setSelectedSpeakerId(newSpeakerId)
-      Object.values(audioRefs.current).forEach(async (audioElement) => {
-        if (audioElement && typeof audioElement.setSinkId === 'function') {
-          try {
-            await audioElement.setSinkId(newSpeakerId)
-          } catch (err) {
-            console.error('Error setting sinkId:', err)
-          }
-        }
-      })
     },
     []
   )
@@ -953,94 +933,18 @@ export default function CallScreen() {
   return (
     <div className={styles.container}>
       {/* 参加者リスト */}
-      <ul className={styles.participantList}>
-        {participants.map((p) => {
-          if (p.isSelf) {
-            return (
-              <li
-                key={p.id}
-                className={`${styles.participantItem} ${styles.selfParticipant} ${p.isSpeaking ? styles.speakingParticipant : ''} ${p.isMuted ? styles.mutedEffect : ''}`}
-              >
-                <div className={styles.participantInfo}>
-                  <span className={styles.participantName}>{p.name}</span>
-                  {isScreenSharingMyself && (
-                    <FiMonitor
-                      className={styles.screenShareIndicatorIcon}
-                      title='画面共有中'
-                    />
-                  )}
-                </div>
-                {p.isMuted && <FiMicOff className={styles.muteIndicatorIcon} />}
-              </li>
-            )
-          }
-          const currentVolume = participantVolumes[p.id] ?? 1.0
-          return (
-            <li
-              key={p.id}
-              className={`${styles.participantItem} ${p.isSpeaking ? styles.speakingParticipant : ''} ${p.isMuted ? styles.mutedEffect : ''}`}
-            >
-              <div className={styles.participantInfo}>
-                <span className={styles.participantName}>{p.name}</span>
-                {p.id === screenSharingPeerId && (
-                  <FiMonitor
-                    className={styles.screenShareIndicatorIcon}
-                    title='画面共有中'
-                  />
-                )}
-              </div>
-              <input
-                type='range'
-                min='0'
-                max='1'
-                step='0.01'
-                value={currentVolume}
-                onChange={(e) =>
-                  handleVolumeChange(p.id, parseFloat(e.target.value))
-                }
-                className={styles.volumeSlider}
-                title={`音量: ${Math.round(currentVolume * 100)}%`}
-              />
-              {p.isMuted && <FiMicOff className={styles.muteIndicatorIcon} />}
-              {p.stream && (
-                <audio
-                  ref={(el) => {
-                    if (el) {
-                      audioRefs.current[p.id] = el
-                      const newSrcObject = p.stream ?? null
-                      if (el.srcObject !== newSrcObject) {
-                        console.log(
-                          `[CallScreen] Setting/Clearing srcObject for audio element ${p.id}`
-                        )
-                        el.srcObject = newSrcObject
-                      }
-                    } else {
-                      delete audioRefs.current[p.id]
-                    }
-                  }}
-                  autoPlay
-                  playsInline
-                  muted={false}
-                  onLoadedMetadata={(e) => {
-                    const target = e.target as HTMLAudioElement
-                    if (typeof target.setSinkId === 'function') {
-                      target
-                        .setSinkId(selectedSpeakerIdRef.current)
-                        .catch((err) =>
-                          console.error(
-                            'Failed to set sinkId on audio element:',
-                            err
-                          )
-                        )
-                    }
-                    target.volume = participantVolumesRef.current[p.id] ?? 1.0
-                  }}
-                />
-              )}
-            </li>
-          )
-        })}
-      </ul>
+      <div className={styles.participantListContainer}>
+        {' '}
+        {/* 必要ならコンテナで囲む */}
+        <ParticipantList
+          participants={participants}
+          myPeerId={myPeerIdFromHook}
+          screenSharingPeerId={screenSharingPeerId}
+          participantVolumes={participantVolumes}
+          onVolumeChange={handleVolumeChange}
+          selectedSpeakerId={selectedSpeakerId}
+        />
+      </div>
 
       {/* 画面共有表示エリア */}
       <div className={styles.screenShareArea}>
@@ -1091,7 +995,10 @@ export default function CallScreen() {
       {/* フッター */}
       <CallControlsFooter
         isMuted={isMuted}
-        isScreenSharing={isScreenSharingMyself}
+        // isScreenSharing={isScreenSharingMyself} // isScreenSharingMyself を計算して渡す
+        isScreenSharing={
+          screenSharingPeerId === myPeerIdFromHook && myPeerIdFromHook !== ''
+        }
         microphones={microphones}
         speakers={speakers}
         selectedMicId={selectedMicId}
@@ -1108,6 +1015,11 @@ export default function CallScreen() {
         roomCode={roomCode}
         screenVolume={screenVolume}
         handleScreenVolumeChange={handleScreenVolumeChange}
+        // isScreenShareButtonDisabled={isScreenShareButtonDisabled} // isScreenShareButtonDisabled を計算して渡す
+        isScreenShareButtonDisabled={
+          screenSharingPeerId !== null &&
+          screenSharingPeerId !== myPeerIdFromHook
+        }
       />
 
       {/* オーディオ要素用コンテナ */}

@@ -49,178 +49,22 @@
   overflow: hidden;
 }
 
-.participantList {
-  order: 1;
-  width: 280px;
-  flex-shrink: 0;
-  overflow-y: auto;
+.participantListContainer {
+  order: 1; /* 左側に配置 */
+  width: 280px; /* 幅を指定 */
+  flex-shrink: 0; /* 幅を維持 */
+  overflow-y: auto; /* 縦スクロールを許可 */
+  /* ★ 背景はコンテナに設定 */
   background: linear-gradient(
     180deg,
     rgba(10, 10, 20, 0.9) 0%,
     rgba(30, 20, 50, 0.95) 100%
   );
-  padding: 20px;
-  border-right: 1px solid #444; /* 区切り線の色も調整 */
-  display: flex;
-  flex-direction: column;
-  gap: 12px; /* ボックス間の間隔を少し詰める */
-  list-style: none;
-}
-
-.participantItem {
-  /* ★ 背景色を非常に暗く、わずかに透明に */
-  background-color: rgba(0, 0, 0, 0.2);
-  color: var(--text-color-on-dark-bg);
-  /* border はなし */
-  backdrop-filter: blur(var(--blur-intensity));
-  -webkit-backdrop-filter: blur(var(--blur-intensity));
-  padding: 14px 20px; /* パディングを少し調整 */
-  border-radius: var(--border-radius); /* :root の値を参照 */
-  /* ★ デフォルトの影を削除 (または :root で調整) */
-  display: flex;
-  flex-direction: column;
-  gap: 8px; /* 名前エリアと音量バーの間隔を少し詰める */
-  /* ★ アニメーションの準備 */
-  position: relative; /* アイコン配置の基準 */
-  overflow: hidden; /* はみ出し防止 */
-  /* ★ 赤背景アニメーション用の設定 */
-  background-image: linear-gradient(
-    to left,
-    rgba(var(--muted-red-rgb), 0.6),
-    rgba(var(--muted-red-rgb), 0.6)
-  );
-  background-repeat: no-repeat;
-  background-position: right center;
-  background-size: 0% 100%; /* 初期状態は幅0% */
-  transition:
-    box-shadow var(--transition-duration) ease,
-    background-color var(--transition-duration) ease,
-    /* ホバー用 */ background-size var(--transition-duration) ease-in-out; /* ★ 背景サイズのアニメーション */
-}
-
-/* ★ ホバー時の背景色を少し明るく (または薄紫に) */
-.participantItem:hover {
-  background-color: rgba(var(--accent-color-primary-rgb), 0.1); /* 例: 薄紫 */
-}
-/* ★ ミュート時のスタイル */
-.mutedEffect {
-  background-size: 100% 100%; /* 背景を100%に広げる */
-}
-
-.participantInfo {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  position: relative;
-  z-index: 1;
-  padding-right: 30px; /* muteIndicatorIcon の width + α */
-}
-
-.selfParticipant {
-  /* .participantItem のスタイルを継承 */
-}
-
-.participantName {
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  /* ★ 通常時の色を少し透過した白に */
-  color: rgba(255, 255, 255, 0.6);
-  /* ★ 色の変化を滑らかにする transition を追加 */
-  transition: color var(--transition-duration) ease;
-}
-
-/* ★ 画面共有中アイコンのスタイル */
-.screenShareIndicatorIcon {
-  font-size: 1.1rem;
-  color: rgba(var(--accent-color-speaking-rgb), 1);
-  flex-shrink: 0;
-  margin-left: px;
-  width: 1.2em;
-  height: 1.2em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translateY(-2px);
-}
-
-/* ★ ミュート時に表示されるアイコンのスタイル */
-.muteIndicatorIcon {
-  position: absolute;
-  top: 14px; /* participantItem の padding-top と合わせる */
-  right: 20px;
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.8); /* アイコンの色 (白系) */
-  opacity: 0; /* 初期状態は非表示 */
-  transition: opacity var(--transition-duration) ease;
-  z-index: 1; /* participantInfo と同じ階層 */
-  /* ★ アイコンの幅を確保 */
-  width: 1.2em;
-  height: 1.2em;
-  display: flex; /* 中央揃えのため */
-  align-items: center;
-  justify-content: center;
-}
-/* ★ ミュート時にアイコンを表示 */
-.mutedEffect .muteIndicatorIcon {
-  opacity: 1;
-}
-
-/* ★ 音量バーのスタイル */
-.volumeSlider {
-  width: 100%;
-  /* ★ 高さを少し戻す */
-  height: 6px;
-  cursor: pointer;
-  appearance: none;
-  /* ★ 背景を少し暗く */
-  background: rgba(255, 255, 255, 0.1);
-  /* ★ 角丸をトラックの高さに合わせる */
-  border-radius: 3px;
-  outline: none;
-  transition: opacity 0.2s;
-  position: relative;
-  z-index: 1;
-}
-
-/* ★ スライダーのつまみ (Chrome, Edge, Safari) */
-.volumeSlider::-webkit-slider-thumb {
-  appearance: none;
-  width: 6px;
-  height: 14px; /* 高さを少し出す */
-  background: rgba(255, 255, 255, 0.4); /* 例: 半透明の白 */
-  border-radius: 2px;
-  cursor: pointer;
-}
-
-/* ★ スライダーのつまみ (Firefox) */
-.volumeSlider::-moz-range-thumb {
-  width: 6px;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.4);
-  border-radius: 2px;
-  cursor: pointer;
-  border: none; /* Firefox はボーダーをリセット */
-}
-
-.selfParticipant .muteIcon {
-  color: rgba(255, 255, 255, 0.75);
-}
-
-li.speakingParticipant {
-  /* ★ 水色の影に変更 */
-  box-shadow: 0 0 10px 3px rgba(var(--accent-color-speaking-rgb), 0.7);
-}
-
-/* ★ 発言中の参加者の名前の色を白にする */
-.speakingParticipant .participantName {
-  color: var(--text-color-on-dark-bg); /* 完全な白 */
-}
-
-.speakingParticipant .muteIcon:not(.muted) {
-  color: rgba(var(--accent-color-speaking-rgb), 1);
+  padding: 20px; /* 内側の余白 */
+  border-right: 1px solid rgba(255, 255, 255, 0.1); /* 右側の境界線 */
+  /* gap は不要 (中の ul で設定) */
+  /* list-style は不要 */
+  /* display: flex, flex-direction: column は不要 */
 }
 
 /* ★★★ 画面共有エリアのスタイル ★★★ */
