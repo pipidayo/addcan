@@ -1,0 +1,39 @@
+/* src/app/components/ScreenShareDisplay/styles.module.css */
+
+/* CallScreen/styles.module.css から移動 */
+.screenShareArea {
+  /* order: 2; は CallScreen のレイアウト用なので削除 */
+  /* flex: 1; は CallScreen のレイアウト用なので削除 */
+  height: 100%; /* 親要素に合わせる */
+  /* background は親要素 (CallScreen の .container) に依存するので削除 */
+  position: relative; /* ローディング表示などの基準に */
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* ★ 必要なら背景色を追加 */
+  background-color: #111; /* 例: 暗い背景 */
+}
+
+.screenVideo,
+.localScreenPreview {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background-color: #000; /* 念のため */
+}
+
+/* 共有がない場合やローディング中のスタイル */
+.loadingScreenShare,
+.noScreenShare {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-color-muted); /* globals.css の変数を参照 */
+  font-size: 1.1em;
+  text-align: center;
+  padding: 20px;
+}

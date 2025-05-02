@@ -9,6 +9,7 @@ import { usePeerConnection } from '@/app/hooks/usePeerConnection'
 import { FiMicOff, FiMonitor } from 'react-icons/fi'
 import { toast } from 'react-toastify'
 import ParticipantList from '../ParticipantList'
+import ScreenShareDisplay from '../ScreenShareDisplay'
 
 // WebSocket サーバーの URL
 const WEBSOCKET_SERVER_URL =
@@ -946,52 +947,17 @@ export default function CallScreen() {
         />
       </div>
 
-      {/* 画面共有表示エリア */}
       <div className={styles.screenShareArea}>
-        {(() => {
-          if (isScreenSharingMyself && localScreenStreamFromHook) {
-            return (
-              <video
-                ref={localScreenPreviewRef}
-                className={styles.localScreenPreview}
-                autoPlay
-                playsInline
-                muted
-              />
-            )
-          } else if (
-            screenSharingPeerId &&
-            screenSharingPeerId !== myPeerIdFromHook &&
-            screenShareStream
-          ) {
-            return (
-              <video
-                ref={screenVideoRef}
-                className={styles.screenVideo}
-                autoPlay
-                playsInline
-              />
-            )
-          } else if (
-            screenSharingPeerId &&
-            screenSharingPeerId !== myPeerIdFromHook &&
-            !screenShareStream
-          ) {
-            return (
-              <div className={styles.loadingScreenShare}>
-                画面を読み込み中...
-              </div>
-            )
-          } else {
-            return (
-              <div className={styles.noScreenShare}>
-                画面共有はされていません
-              </div>
-            )
-          }
-        })()}
+        {/* 画面共有表示エリア */}
+        <ScreenShareDisplay
+          screenSharingPeerId={screenSharingPeerId}
+          myPeerId={myPeerIdFromHook}
+          localScreenStream={localScreenStreamFromHook} // usePeerConnection からのローカルストリーム
+          remoteScreenStream={screenShareStream} // State のリモートストリーム
+          screenVideoRef={screenVideoRef} // Ref を渡す
+          localScreenPreviewRef={localScreenPreviewRef} // Ref を渡す
+        />
       </div>
-
       {/* フッター */}
       <CallControlsFooter
         isMuted={isMuted}
