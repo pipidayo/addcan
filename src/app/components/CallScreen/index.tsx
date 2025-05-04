@@ -359,21 +359,188 @@ export default function CallScreen() {
 
   const getDevices = useCallback(async () => {
     try {
-      // ... (getDevices の実装) ...
+      await navigator.mediaDevices.getUserMedia({ audio: true, video: false }) // ★ アクセス許可を先に求める
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const mics = devices.filter((device) => device.kind === 'audioinput')
+      const spkrs = devices.filter((device) => device.kind === 'audiooutput')
+
+      console.log('[CallScreen getDevices] Microphones found:', mics)
+      console.log('[CallScreen getDevices] Speakers found:', spkrs)
+
+      setMicrophones(mics)
+      setSpeakers(spkrs)
+
+      // デフォルトデバイスを選択 (もし未選択なら)
+      if (!selectedMicId && mics.length > 0) {
+        const defaultMic =
+          mics.find((mic) => mic.deviceId === 'default') || mics[0]
+        setSelectedMicId(defaultMic.deviceId)
+        console.log(
+          '[CallScreen getDevices] Setting default Mic ID:',
+          defaultMic.deviceId
+        )
+      }
+      if (!selectedSpeakerId && spkrs.length > 0) {
+        const defaultSpeaker =
+          spkrs.find((spk) => spk.deviceId === 'default') || spkrs[0]
+        setSelectedSpeakerId(defaultSpeaker.deviceId)
+        console.log(
+          '[CallScreen getDevices] Setting default Speaker ID:',
+          defaultSpeaker.deviceId
+        )
+      }
     } catch (err) {
       console.error('Error enumerating devices:', err)
+      // ★ エラー発生時はリストを空にするか、ユーザーに通知
+      setMicrophones([])
+      setSpeakers([])
+      toast.error(
+        'マイク・スピーカーの取得に失敗しました。アクセス許可を確認してください。'
+      )
     }
-  }, [])
+  }, [selectedMicId, selectedSpeakerId])
 
   const stopLocalAudioAnalysis = useCallback(() => {
-    // ... (stopLocalAudioAnalysis の実装) ...
-  }, [])
+    if (localAudioAnalysis.current.animationFrameId) {
+      cancelAnimationFrame(localAudioAnalysis.current.animationFrameId)
+      localAudioAnalysis.current.animationFrameId = null
+    }
+    if (localAudioAnalysis.current.source) {
+      localAudioAnalysis.current.source.disconnect()
+      localAudioAnalysis.current.source = null
+    }
+    if (localAudioAnalysis.current.analyser) {
+      localAudioAnalysis.current.analyser.disconnect()
+      localAudioAnalysis.current.analyser = null
+    }
+
+    localAudioAnalysis.current.isSpeaking = false
+    // 自分の発言状態を更新 (upsertParticipant を使う)
+    if (myPeerIdFromHook) {
+      upsertParticipant({ id: myPeerIdFromHook, isSpeaking: false })
+    }
+    console.log('[CallScreen] Stopped local audio analysis.')
+  }, [myPeerIdFromHook, upsertParticipant])
 
   const startLocalAudioAnalysis = useCallback(
     (stream: MediaStream) => {
-      // ... (startLocalAudioAnalysis の実装) ...
+      // ↓↓↓ startLocalAudioAnalysis の実装を追加 ↓↓↓
+      if (!stream || !stream.getAudioTracks().length) {
+        console.warn(
+          '[CallScreen] Cannot start audio analysis: No audio track found.'
+        )
+        return
+      }
+      if (localAudioAnalysis.current.animationFrameId) {
+        console.warn('[CallScreen] Audio analysis already running.')
+        return // すでに実行中なら何もしない
+      }
+
+      console.log('[CallScreen] Starting local audio analysis...')
+
+      try {
+        // AudioContext を取得または作成
+        const context = localAudioAnalysis.current.context || new AudioContext()
+        localAudioAnalysis.current.context = context
+
+        // AnalyserNode を作成・設定
+        const analyser = context.createAnalyser()
+        analyser.fftSize = 256 // 高速フーリエ変換のサイズ
+        const bufferLength = analyser.frequencyBinCount
+        const dataArray = new Uint8Array(bufferLength)
+        localAudioAnalysis.current.analyser = analyser
+        localAudioAnalysis.current.dataArray = dataArray
+
+        // MediaStreamSource を作成・接続
+        const source = context.createMediaStreamSource(stream)
+        localAudioAnalysis.current.source = source
+        source.connect(analyser)
+        // analyser はどこにも接続しない (音を聞く必要はないため)
+
+        let consecutiveSilenceFrames = 0
+        const silenceThresholdFrames = 10 // 静音と判定するまでのフレーム数
+        let consecutiveSpeakingFrames = 0
+        const speakingThresholdFrames = 3 // 発言と判定するまでのフレーム数
+
+        const analyse = () => {
+          if (
+            !localAudioAnalysis.current.analyser ||
+            !localAudioAnalysis.current.dataArray
+          ) {
+            console.warn(
+              '[CallScreen analyse] Analyser or dataArray not available.'
+            )
+            localAudioAnalysis.current.animationFrameId = null // 念のためクリア
+            return
+          }
+
+          localAudioAnalysis.current.analyser.getByteFrequencyData(
+            localAudioAnalysis.current.dataArray
+          )
+
+          // 簡単な音量計算 (周波数データの平均値)
+          let sum = 0
+          for (let i = 0; i < bufferLength; i++) {
+            sum += localAudioAnalysis.current.dataArray[i]
+          }
+          const average = sum / bufferLength
+
+          let currentIsSpeaking = localAudioAnalysis.current.isSpeaking
+
+          if (average > localSpeakingThreshold) {
+            consecutiveSilenceFrames = 0 // 無音フレームカウントリセット
+            consecutiveSpeakingFrames++
+            if (
+              consecutiveSpeakingFrames >= speakingThresholdFrames &&
+              !currentIsSpeaking
+            ) {
+              currentIsSpeaking = true
+            }
+          } else {
+            consecutiveSpeakingFrames = 0 // 発言フレームカウントリセット
+            consecutiveSilenceFrames++
+            if (
+              consecutiveSilenceFrames >= silenceThresholdFrames &&
+              currentIsSpeaking
+            ) {
+              currentIsSpeaking = false
+            }
+          }
+
+          // 状態が変わった場合のみ更新
+          if (currentIsSpeaking !== localAudioAnalysis.current.isSpeaking) {
+            localAudioAnalysis.current.isSpeaking = currentIsSpeaking
+            console.log(
+              `[CallScreen analyse] Speaking state changed: ${currentIsSpeaking}`
+            )
+            // 自分の発言状態を更新
+            if (myPeerIdFromHook) {
+              upsertParticipant({
+                id: myPeerIdFromHook,
+                isSpeaking: currentIsSpeaking,
+              })
+            }
+          }
+
+          // 次のフレームをリクエスト
+          localAudioAnalysis.current.animationFrameId =
+            requestAnimationFrame(analyse)
+        }
+
+        // 解析開始
+        localAudioAnalysis.current.animationFrameId =
+          requestAnimationFrame(analyse)
+      } catch (error) {
+        console.error('[CallScreen] Error starting audio analysis:', error)
+        stopLocalAudioAnalysis() // エラー時は停止処理を試みる
+      }
     },
-    [localSpeakingThreshold, stopLocalAudioAnalysis, myPeerIdFromHook]
+    [
+      localSpeakingThreshold,
+      stopLocalAudioAnalysis,
+      myPeerIdFromHook,
+      upsertParticipant,
+    ]
   )
 
   const handleSpeakerChange = useCallback(
