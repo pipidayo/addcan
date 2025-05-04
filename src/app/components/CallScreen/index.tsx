@@ -57,7 +57,6 @@ export default function CallScreen() {
     useState<MediaStream | null>(null)
   const localScreenPreviewRef = useRef<HTMLVideoElement>(null)
   const [selectedSpeakerId, setSelectedSpeakerId] = useState<string>('')
-  const [screenVolume, setScreenVolume] = useState(0.7)
   const [pendingScreenStreams, setPendingScreenStreams] = useState<{
     [peerId: string]: MediaStream
   }>({})
@@ -556,13 +555,6 @@ export default function CallScreen() {
     router.push('/')
   }, [router])
 
-  const handleScreenVolumeChange = useCallback((volume: number) => {
-    setScreenVolume(volume)
-    if (screenVideoRef.current) {
-      screenVideoRef.current.volume = volume
-    }
-  }, [])
-
   const handleMicChange = useCallback(
     async (event: React.ChangeEvent<HTMLSelectElement>) => {
       const newMicId = event.target.value
@@ -747,7 +739,7 @@ export default function CallScreen() {
     getDevices()
   }, [getDevices])
 
-  // 画面共有ストリーム関連
+  // 画面共有ストリーム関連 Effect
   useEffect(() => {
     console.log(
       `[CallScreen Activate Effect] Running. Sharer: ${screenSharingPeerId}, Pending keys: ${Object.keys(pendingScreenStreams)}`
@@ -791,7 +783,6 @@ export default function CallScreen() {
   useEffect(() => {
     if (screenVideoRef.current && screenShareStream) {
       screenVideoRef.current.srcObject = screenShareStream
-      screenVideoRef.current.volume = screenVolume
       screenVideoRef.current.muted = false
       screenVideoRef.current
         .play()
@@ -799,7 +790,7 @@ export default function CallScreen() {
     } else if (screenVideoRef.current) {
       screenVideoRef.current.srcObject = null
     }
-  }, [screenShareStream, screenVolume])
+  }, [screenShareStream])
 
   useEffect(() => {
     if (
@@ -865,8 +856,7 @@ export default function CallScreen() {
         myPeerId={myPeerIdFromHook}
         participants={participants}
         roomCode={roomCode}
-        screenVolume={screenVolume}
-        handleScreenVolumeChange={handleScreenVolumeChange}
+        screenVideoRef={screenVideoRef}
         isScreenShareButtonDisabled={isScreenShareButtonDisabled}
       />
       {/* <div id='audio-container' style={{ display: 'none' }}></div> */}

@@ -12,7 +12,7 @@ import {
 } from 'react-icons/fi'
 
 // Props の型定義
-interface CallControlsFooterProps {
+type CallControlsFooterProps = {
   isMuted: boolean
   isScreenSharing: boolean
   microphones: MediaDeviceInfo[]
@@ -29,8 +29,7 @@ interface CallControlsFooterProps {
   participants: Participant[]
   screenSharingPeerId: string | null
   roomCode: string | undefined
-  screenVolume: number
-  handleScreenVolumeChange: (volume: number) => void
+  screenVideoRef: React.RefObject<HTMLVideoElement | null>
   isScreenShareButtonDisabled: boolean
 }
 
@@ -50,9 +49,9 @@ export default function CallControlsFooter({
   screenSharingPeerId,
   myPeerId,
   participants,
+  screenVideoRef,
   roomCode,
-  screenVolume,
-  handleScreenVolumeChange,
+
   isScreenShareButtonDisabled,
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
@@ -60,6 +59,17 @@ export default function CallControlsFooter({
   const displayCode = useMemo(() => roomCode?.replace('room-', ''), [roomCode])
   const settingsPopupRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
+  const [screenVolume, setScreenVolume] = useState(0.7)
+  const handleScreenVolumeChange = useCallback(
+    (volume: number) => {
+      setScreenVolume(volume)
+      // ★ Props で受け取った Ref を使って video 要素の音量を設定
+      if (screenVideoRef.current) {
+        screenVideoRef.current.volume = volume
+      }
+    },
+    [screenVideoRef]
+  )
 
   const sharingParticipantName = useMemo(() => {
     if (!screenSharingPeerId) return null
