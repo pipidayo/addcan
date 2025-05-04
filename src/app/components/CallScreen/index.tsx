@@ -341,7 +341,9 @@ export default function CallScreen() {
 
   const handleWebSocketDisconnect = useCallback(
     (reason: Socket.DisconnectReason) => {
-      toast.info('サーバーから切断されました。')
+      // toast.info('サーバーから切断されました。')
+      console.log(`[CallScreen] WebSocket disconnected: ${reason}`)
+
       setParticipants([])
       setScreenSharingPeerId(null)
       setScreenShareStream(null)
