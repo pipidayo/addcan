@@ -835,8 +835,6 @@ export default function CallScreen() {
           participants={participants}
           myPeerId={myPeerIdFromHook}
           screenSharingPeerId={screenSharingPeerId}
-          participantVolumes={participantVolumes}
-          onVolumeChange={handleVolumeChange}
           selectedSpeakerId={selectedSpeakerId}
         />
       </div>

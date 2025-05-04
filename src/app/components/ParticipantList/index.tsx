@@ -1,15 +1,14 @@
 // src/app/components/ParticipantList/index.tsx
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState, useCallback } from 'react'
 import { FiMicOff, FiMonitor } from 'react-icons/fi'
 import type { Participant } from '../../type'
 import styles from './styles.module.css'
 
-interface ParticipantListProps {
+type ParticipantListProps = {
   participants: Participant[]
   myPeerId: string // 自分の Peer ID
   screenSharingPeerId: string | null // 現在画面共有中の人の Peer ID
-  participantVolumes: { [id: string]: number } // 各参加者の音量
-  onVolumeChange: (peerId: string, volume: number) => void // 音量変更時のコールバック
+
   selectedSpeakerId: string // 選択中のスピーカーデバイスID
 }
 
@@ -17,22 +16,57 @@ export default function ParticipantList({
   participants,
   myPeerId,
   screenSharingPeerId,
-  participantVolumes,
-  onVolumeChange,
+
   selectedSpeakerId,
 }: ParticipantListProps) {
   const audioRefs = useRef<{ [id: string]: HTMLAudioElement }>({})
   const selectedSpeakerIdRef = useRef(selectedSpeakerId)
-  const participantVolumesRef = useRef(participantVolumes)
+
+  //  participantVolumes State を内部で持つ
+  const [participantVolumes, setParticipantVolumes] = useState<{
+    [id: string]: number
+  }>({})
+
+  //  handleVolumeChange を内部で定義
+  const handleVolumeChange = useCallback((peerId: string, volume: number) => {
+    setParticipantVolumes((prev) => ({ ...prev, [peerId]: volume }))
+    // ★ 音量を Audio 要素にも即時反映
+    if (audioRefs.current[peerId]) {
+      audioRefs.current[peerId].volume = volume
+    }
+  }, [])
 
   // Props が変更されたら Ref も更新
   useEffect(() => {
     selectedSpeakerIdRef.current = selectedSpeakerId
+    // ★ 既存の Audio 要素の SinkID も更新
+    Object.values(audioRefs.current).forEach((audioEl) => {
+      if (audioEl && typeof audioEl.setSinkId === 'function') {
+        audioEl
+          .setSinkId(selectedSpeakerId)
+          .catch((err) =>
+            console.error('Failed to set sinkId on speaker change:', err)
+          )
+      }
+    })
   }, [selectedSpeakerId])
 
+  //  participantVolumes 初期化 Effect を内部で持つ
   useEffect(() => {
-    participantVolumesRef.current = participantVolumes
-  }, [participantVolumes])
+    setParticipantVolumes((prevVolumes) => {
+      const newVolumes = { ...prevVolumes }
+      let changed = false
+      participants.forEach((p) => {
+        // 自分以外の参加者で、まだ音量設定がない場合、デフォルト値(1.0)を設定
+        if (!p.isSelf && !(p.id in newVolumes)) {
+          newVolumes[p.id] = 1.0
+          changed = true
+        }
+      })
+      // 変更があった場合のみ State を更新
+      return changed ? newVolumes : prevVolumes
+    })
+  }, [participants]) // participants が変更されたら実行
 
   return (
     <ul className={styles.participantList}>
@@ -86,7 +120,9 @@ export default function ParticipantList({
               max='1'
               step='0.01'
               value={currentVolume}
-              onChange={(e) => onVolumeChange(p.id, parseFloat(e.target.value))}
+              onChange={(e) =>
+                handleVolumeChange(p.id, parseFloat(e.target.value))
+              }
               className={styles.volumeSlider}
               title={`音量: ${Math.round(currentVolume * 100)}%`}
             />
@@ -123,7 +159,7 @@ export default function ParticipantList({
                         )
                       )
                   }
-                  target.volume = participantVolumesRef.current[p.id] ?? 1.0 // Ref を使う
+                  target.volume = participantVolumes[p.id] ?? 1.0
                 }}
               />
             )}
