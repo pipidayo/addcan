@@ -1,19 +1,8 @@
 :root {
-  /* トーストの背景色 (例: 少し薄めの紫) */
-  --toastify-color-light: #ede9fe; /* Tailwind の violet-100 */
-  /* トーストの文字色 (例: 濃い紫) */
-  --toastify-text-color-light: #5b21b6; /* Tailwind の violet-700 */
-  /* プログレスバーの色 (例: 標準的な紫) */
-  --toastify-color-progress-light: #8b5cf6; /* Tailwind の violet-500 */
-
-  /* アイコンの色も合わせる (オプション) */
-  --toastify-icon-color-info: var(--toastify-color-progress-light);
-  --toastify-icon-color-success: #10b981; /* 例: 緑系 */
-  --toastify-icon-color-warning: #f59e0b; /* 例: オレンジ系 */
-  --toastify-icon-color-error: #ef4444; /* 例: 赤系 */
-
-  /* 角丸の調整 (オプション) */
-  --toastify-toast-border-radius: 8px; /* 例: 少し丸くする */
+  /* ★ Toast 用の水色を定義 */
+  --accent-color-toast-rgb: 14, 165, 233;
+  --toastify-color-warning: rgb(var(--accent-color-toast-rgb));
+  --toastify-text-color-warning: #ffffff;
 
   /* 色 (基本) */
   --text-color-on-light-bg: #111827; /* 濃いグレー */
@@ -25,9 +14,6 @@
   --accent-color-primary-hover-rgb:
     76, 29, 149; /* さらに濃い紫 RGB (#4c1d95) */
   --accent-color-primary-active-rgb: 67, 20, 119; /* 最も濃い紫 RGB (#431477) */
-
-  /* 色 (アクセント - 緑系) */
-  --accent-color-speaking-rgb: 5, 150, 105; /* 緑 RGB (#059669) */
 
   /* 色 (その他) */
   --icon-color-muted: #dc2626; /* 赤 */
@@ -63,18 +49,47 @@
   --input-placeholder-color: rgba(255, 255, 255, 0.5);
 }
 
+/* Warning Toast の背景色 */
+.Toastify__toast--warning {
+  /* グラデーション背景 */
+  background: linear-gradient(
+    135deg,
+    rgba(var(--accent-color-toast-rgb), 0.95) 0%,
+    rgba(var(--accent-color-toast-rgb), 0.85) 100%
+  ) !important;
+  color: var(--toastify-text-color-warning) !important;
+  border-radius: 12px !important; /* 角丸を少し大きく */
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important; /* 影を追加 */
+  border: 1px solid rgba(255, 255, 255, 0.1) !important; /* 細い白い境界線 */
+  backdrop-filter: blur(5px) !important; /* 背景を少しぼかす */
+  -webkit-backdrop-filter: blur(5px) !important;
+}
+
+/* Toast のテキスト部分 */
+.Toastify__toast--warning .Toastify__toast-body {
+  font-weight: 500; /* 少し太字に */
+}
+
+/* プログレスバー */
+.Toastify__progress-bar--warning {
+  /* 白っぽい色にして目立たせる */
+  background: rgba(255, 255, 255, 0.7) !important;
+  height: 4px !important; /* 少し太く */
+  border-radius: 0 0 10px 10px !important; /* 下側の角だけ丸める */
+}
+
+/* プログレスバー */
+.Toastify__progress-bar--warning {
+  /* 白っぽい色にして目立たせる */
+  background: rgba(255, 255, 255, 0.7) !important;
+  height: 4px !important; /* 少し太く */
+  border-radius: 0 0 10px 10px !important; /* 下側の角だけ丸める */
+}
+
 html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
 * {
