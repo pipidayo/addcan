@@ -2,6 +2,7 @@
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react'
 import styles from './styles.module.css'
 import type { Participant } from '../../type'
+import { toast } from 'react-toastify'
 import {
   FiMic,
   FiMicOff,
@@ -17,12 +18,10 @@ type CallControlsFooterProps = {
   isScreenSharing: boolean
   microphones: MediaDeviceInfo[]
   speakers: MediaDeviceInfo[]
-  selectedMicId: string
   selectedSpeakerId: string
   localStream: MediaStream | null
   toggleMic: () => void
   toggleScreenShare: () => void
-  handleMicChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   handleSpeakerChange: (event: React.ChangeEvent<HTMLSelectElement>) => void
   leaveRoom: () => void
   myPeerId: string
@@ -31,6 +30,8 @@ type CallControlsFooterProps = {
   roomCode: string | undefined
   screenVideoRef: React.RefObject<HTMLVideoElement | null>
   isScreenShareButtonDisabled: boolean
+  switchMicrophone: (deviceId: string) => Promise<void> // ★ マイク切り替え関数を受け取る
+  stopLocalAudioAnalysis: () => void // ★ 音声解析停止関数も必要
 }
 
 export default function CallControlsFooter({
@@ -38,12 +39,10 @@ export default function CallControlsFooter({
   isScreenSharing,
   microphones,
   speakers,
-  selectedMicId,
   selectedSpeakerId,
   localStream,
   toggleMic,
   toggleScreenShare,
-  handleMicChange,
   handleSpeakerChange,
   leaveRoom,
   screenSharingPeerId,
@@ -51,8 +50,9 @@ export default function CallControlsFooter({
   participants,
   screenVideoRef,
   roomCode,
-
   isScreenShareButtonDisabled,
+  switchMicrophone, // ★ マイク切り替え関数を受け取る
+  stopLocalAudioAnalysis, // ★ 音声解析停止関数を受け取る
 }: CallControlsFooterProps) {
   const [showDeviceSettings, setShowDeviceSettings] = useState(false)
   const [isCopied, setIsCopied] = useState(false)
@@ -60,6 +60,46 @@ export default function CallControlsFooter({
   const settingsPopupRef = useRef<HTMLDivElement>(null)
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const [screenVolume, setScreenVolume] = useState(0.7)
+  const [selectedMicId, setSelectedMicId] = useState<string>('')
+
+  const handleMicChange = useCallback(
+    async (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const newMicId = event.target.value
+      const currentMicId = selectedMicId // エラー時に戻すため保持
+      setSelectedMicId(newMicId) // UI を即時反映
+      try {
+        stopLocalAudioAnalysis() // マイク変更前に解析を停止
+        await switchMicrophone(newMicId) // Props の関数を呼び出し
+        console.log(
+          '[CallControlsFooter] Microphone switched successfully to:',
+          newMicId
+        )
+      } catch (error) {
+        console.error(
+          '[CallControlsFooter] Failed to switch microphone:',
+          error
+        )
+        toast.error(
+          `マイクの切り替え失敗: ${error instanceof Error ? error.message : String(error)}`
+        )
+        setSelectedMicId(currentMicId) // エラー時は選択を元に戻す
+      }
+    },
+    [selectedMicId, switchMicrophone, stopLocalAudioAnalysis] // 依存配列
+  )
+  // ★ デフォルトマイクIDを設定する Effect
+  useEffect(() => {
+    if (!selectedMicId && microphones.length > 0) {
+      const defaultMic =
+        microphones.find((mic) => mic.deviceId === 'default') || microphones[0]
+      setSelectedMicId(defaultMic.deviceId)
+      console.log(
+        '[CallControlsFooter] Setting default Mic ID:',
+        defaultMic.deviceId
+      )
+    }
+  }, [microphones, selectedMicId]) // microphones が読み込まれた後、selectedMicId が空なら実行
+
   const handleScreenVolumeChange = useCallback(
     (volume: number) => {
       setScreenVolume(volume)

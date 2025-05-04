@@ -35,7 +35,6 @@ export default function CallScreen() {
   const [isMuted, setIsMuted] = useState(false)
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
   const [speakers, setSpeakers] = useState<MediaDeviceInfo[]>([])
-  const [selectedMicId, setSelectedMicId] = useState<string>('')
   const localAudioAnalysis = useRef<LocalAudioAnalysisRefs>({
     context: null,
     analyser: null,
@@ -369,16 +368,6 @@ export default function CallScreen() {
       setMicrophones(mics)
       setSpeakers(spkrs)
 
-      // デフォルトデバイスを選択 (もし未選択なら)
-      if (!selectedMicId && mics.length > 0) {
-        const defaultMic =
-          mics.find((mic) => mic.deviceId === 'default') || mics[0]
-        setSelectedMicId(defaultMic.deviceId)
-        console.log(
-          '[CallScreen getDevices] Setting default Mic ID:',
-          defaultMic.deviceId
-        )
-      }
       if (!selectedSpeakerId && spkrs.length > 0) {
         const defaultSpeaker =
           spkrs.find((spk) => spk.deviceId === 'default') || spkrs[0]
@@ -397,7 +386,7 @@ export default function CallScreen() {
         'マイク・スピーカーの取得に失敗しました。アクセス許可を確認してください。'
       )
     }
-  }, [selectedMicId, selectedSpeakerId])
+  }, [selectedSpeakerId])
 
   const stopLocalAudioAnalysis = useCallback(() => {
     if (localAudioAnalysis.current.animationFrameId) {
@@ -554,25 +543,6 @@ export default function CallScreen() {
   const leaveRoom = useCallback(() => {
     router.push('/')
   }, [router])
-
-  const handleMicChange = useCallback(
-    async (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const newMicId = event.target.value
-      const currentMicId = selectedMicId
-      setSelectedMicId(newMicId)
-      try {
-        stopLocalAudioAnalysis()
-        await switchMicrophoneHook(newMicId)
-      } catch (error) {
-        console.error('Failed to switch microphone:', error)
-        toast.error(
-          `マイクの切り替え失敗: ${error instanceof Error ? error.message : String(error)}`
-        )
-        setSelectedMicId(currentMicId)
-      }
-    },
-    [selectedMicId, stopLocalAudioAnalysis, switchMicrophoneHook]
-  )
 
   const toggleMic = useCallback(() => {
     if (!localStream) return
@@ -844,13 +814,13 @@ export default function CallScreen() {
         isScreenSharing={isScreenSharingMyself}
         microphones={microphones}
         speakers={speakers}
-        selectedMicId={selectedMicId}
         selectedSpeakerId={selectedSpeakerId}
         localStream={localStream}
         toggleMic={toggleMic}
         toggleScreenShare={toggleScreenShare}
-        handleMicChange={handleMicChange}
         handleSpeakerChange={handleSpeakerChange}
+        switchMicrophone={switchMicrophoneHook} // ★ マイク切り替え関数を渡す
+        stopLocalAudioAnalysis={stopLocalAudioAnalysis} // ★ 音声解析停止関数を渡す
         leaveRoom={leaveRoom}
         screenSharingPeerId={screenSharingPeerId}
         myPeerId={myPeerIdFromHook}
