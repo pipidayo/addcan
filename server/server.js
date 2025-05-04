@@ -11,7 +11,8 @@ const io = new Server(httpServer, {
   },
 })
 
-const rooms = {} // { roomCode: { peerId: name, ... }, ... }
+const rooms = {}
+const peerIdToSocketId = new Map()
 
 io.on('connection', (socket) => {
   console.log(`Connection handler started for socket ID: ${socket.id}`)
@@ -35,8 +36,23 @@ io.on('connection', (socket) => {
       `[Server] Received join-room from ${peerId} for room ${roomCode}`
     )
 
+    // 以前の接続情報があればクリーンアップ (念のため)
+    // (同じ peerId で再接続した場合など)
+    const oldSocketId = peerIdToSocketId.get(peerId)
+    if (oldSocketId && oldSocketId !== socket.id) {
+      console.log(`[Server] Cleaning up old socket mapping for peer ${peerId}`)
+      // 必要であれば、古いソケットに関連するルーム情報などもクリーンアップ
+      const oldSocket = io.sockets.sockets.get(oldSocketId)
+      if (oldSocket) {
+        // 古いソケットを強制的に退出させるなどの処理も可能
+      }
+    }
+
     socket.currentPeerId = peerId
     socket.currentRoomCode = roomCode
+    //  Peer ID と Socket ID を紐付け
+    peerIdToSocketId.set(peerId, socket.id)
+    console.log(`[Server] Mapped peer ${peerId} to socket ${socket.id}`)
 
     // 部屋が存在しなければ作成
     if (!rooms[roomCode]) {
@@ -72,6 +88,31 @@ io.on('connection', (socket) => {
       { peerId, name }
     )
     socket.to(roomCode).emit('user-joined', { peerId, name })
+
+    //  新しい参加者への画面共有開始を通知
+    if (room.sharerPeerId && room.sharerPeerId !== peerId) {
+      const sharerSocketId = peerIdToSocketId.get(room.sharerPeerId) // ★ 共有者の Socket ID を取得
+      if (sharerSocketId) {
+        const sharerSocket = io.sockets.sockets.get(sharerSocketId) // ★ 共有者の Socket オブジェクトを取得
+        if (sharerSocket) {
+          console.log(
+            `[Server] Notifying sharer ${room.sharerPeerId} (socket ${sharerSocketId}) to share with new peer ${peerId}`
+          )
+          // ★ 共有者だけに通知を送信
+          sharerSocket.emit('initiate-screen-share-to-new-peer', {
+            newPeerId: peerId,
+          })
+        } else {
+          console.warn(
+            `[Server] Could not find socket object for sharer socket ID ${sharerSocketId}`
+          )
+        }
+      } else {
+        console.warn(
+          `[Server] Could not find socket ID mapping for sharer peer ID ${room.sharerPeerId}`
+        )
+      }
+    }
 
     // 参加者に既存の参加者リストと現在の共有者IDを送信
     const participantsToSend = { ...existingParticipants }
@@ -206,6 +247,12 @@ io.on('connection', (socket) => {
     console.log(`[Server] disconnect event for socket ID: ${socket.id}`)
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
+
+    // Peer ID と Socket ID の紐付けを解除
+    if (peerId) {
+      peerIdToSocketId.delete(peerId)
+      console.log(`[Server] Unmapped peer ${peerId} from socket ${socket.id}`)
+    }
 
     console.log(
       `[Server disconnect] Before cleanup: Peer ID: ${peerId}, Room: ${roomCode}`
