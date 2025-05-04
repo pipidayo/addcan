@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Socket } from 'socket.io-client'
 import { PeerManager, type InitPeerOptions } from '../components/PeerManager'
-import type { Participant } from '../components/CallScreen'
+import type { Participant } from '../type'
 
 // --- インターフェース定義  ---
 interface UsePeerConnectionOptions {

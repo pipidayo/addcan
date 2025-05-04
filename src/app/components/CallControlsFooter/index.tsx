@@ -1,7 +1,7 @@
 // src/app/components/CallControlsFooter/index.tsx
 import React, { useMemo, useCallback, useState, useRef, useEffect } from 'react'
 import styles from './styles.module.css'
-import type { Participant } from '../CallScreen'
+import type { Participant } from '../../type'
 import {
   FiMic,
   FiMicOff,

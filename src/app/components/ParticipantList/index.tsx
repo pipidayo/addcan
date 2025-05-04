@@ -1,7 +1,7 @@
 // src/app/components/ParticipantList/index.tsx
 import React, { useRef, useEffect } from 'react'
 import { FiMicOff, FiMonitor } from 'react-icons/fi'
-import type { Participant } from '../CallScreen' // 型定義をインポート
+import type { Participant } from '../../type'
 import styles from './styles.module.css'
 
 interface ParticipantListProps {
