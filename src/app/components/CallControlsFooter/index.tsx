@@ -10,6 +10,8 @@ import {
   FiSettings,
   FiPhone,
   FiCheck,
+  FiVolume2,
+  FiVolumeX,
 } from 'react-icons/fi'
 
 // Props の型定義
@@ -61,6 +63,7 @@ export default function CallControlsFooter({
   const settingsButtonRef = useRef<HTMLButtonElement>(null)
   const [screenVolume, setScreenVolume] = useState(0.7)
   const [selectedMicId, setSelectedMicId] = useState<string>('')
+  const [isScreenShareMuted, setIsScreenShareMuted] = useState(false)
 
   const handleMicChange = useCallback(
     async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -103,13 +106,37 @@ export default function CallControlsFooter({
   const handleScreenVolumeChange = useCallback(
     (volume: number) => {
       setScreenVolume(volume)
-      // ★ Props で受け取った Ref を使って video 要素の音量を設定
       if (screenVideoRef.current) {
         screenVideoRef.current.volume = volume
+        // ★ 音量スライダー操作でミュート解除
+        if (volume > 0 && isScreenShareMuted) {
+          setIsScreenShareMuted(false)
+          screenVideoRef.current.muted = false
+        }
+        // ★ 音量が0になったらミュート状態にする (任意)
+        if (volume === 0 && !isScreenShareMuted) {
+          setIsScreenShareMuted(true)
+          screenVideoRef.current.muted = true
+        }
       }
     },
-    [screenVideoRef]
+    [screenVideoRef, isScreenShareMuted]
   )
+
+  //  画面共有ミュート切り替え関数
+  const toggleScreenShareMute = useCallback(() => {
+    const nextMutedState = !isScreenShareMuted
+    setIsScreenShareMuted(nextMutedState)
+    if (screenVideoRef.current) {
+      screenVideoRef.current.muted = nextMutedState
+      // ミュート解除時に音量が0だったら少し戻す (任意)
+      if (!nextMutedState && screenVideoRef.current.volume === 0) {
+        const defaultVolume = 0.5 // または以前の音量を記憶しておくなど
+        setScreenVolume(defaultVolume)
+        screenVideoRef.current.volume = defaultVolume
+      }
+    }
+  }, [isScreenShareMuted, screenVideoRef])
 
   const sharingParticipantName = useMemo(() => {
     if (!screenSharingPeerId) return null
@@ -275,7 +302,13 @@ export default function CallControlsFooter({
         {/* 画面共有ボリューム */}
         {screenSharingPeerId && screenSharingPeerId !== myPeerId && (
           <div className={styles.screenVolumeControl}>
-            <FiMonitor className={styles.volumeIcon} />
+            <button
+              onClick={toggleScreenShareMute}
+              className={`${styles.iconButton} ${styles.volumeIconToggle}`} // 新しいスタイルクラスを追加 (任意)
+              title={isScreenShareMuted ? 'ミュート解除' : 'ミュート'}
+            >
+              {isScreenShareMuted ? <FiVolumeX /> : <FiVolume2 />}
+            </button>
             <input
               type='range'
               min='0'

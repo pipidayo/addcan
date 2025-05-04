@@ -155,9 +155,7 @@
   cursor: pointer;
 }
 /* ホバー、フォーカス、無効時のスタイルも元に戻すか削除 */
-.deviceSelector select:hover {
-  /* 元のホバー効果 (なければ削除) */
-}
+
 .deviceSelector select:focus {
   /* 元のフォーカス効果 (なければ削除) */
   outline: auto;
@@ -178,10 +176,31 @@
   color: var(--text-color-muted);
   font-size: 0.9rem;
 }
+
+/* ★ 音量アイコンボタンのスタイル */
 .volumeIcon {
   font-size: 1.2rem;
   color: var(--text-color-muted);
 }
+
+.volumeIconToggle {
+  background: none;
+  border: none;
+  padding: 5px; /* クリック領域 */
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-color-muted); /* 通常の色 */
+  font-size: 1.2rem; /* 元の volumeIcon と同じサイズ */
+  transition: color var(--transition-duration) ease;
+}
+
+.volumeIconToggle:hover {
+  color: var(--text-color-on-dark-bg); /* ホバー時の色 */
+}
+
 /* ★ 画面共有音量スライダーのスタイル (元のスタイル) */
 .screenVolumeSlider {
   width: 100px;
