@@ -83,6 +83,30 @@
   opacity: 0.6;
 }
 
+/* ★ ボタンクリック時の一時的なアクティブ状態 (水色アイコン) */
+/*   または、設定表示中など */
+.activeStateButton {
+  /* ↓↓↓ アイコン色を水色に設定 ↓↓↓ */
+  color: rgb(var(--accent-color-speaking-rgb));
+  /* ↓↓↓ 背景色は変えない (または少し変える) ↓↓↓ */
+  /* background-color: #5a5e6a; */ /* 例: 少し明るいグレー */
+}
+
+/* ★★★ 画面共有中の状態 (赤色アイコン) ★★★ */
+.sharingActive {
+  /* ↓↓↓ 背景色を赤に設定 ↓↓↓ */
+  background-color: #d9534f;
+  /* ↓↓↓ アイコン色を赤に設定 ↓↓↓ */
+  color: white;
+  /* ↓↓↓ 背景色は変えない (または少し変える) ↓↓↓ */
+  /* background-color: #5a5e6a; */
+}
+/* 共有中のホバー */
+.sharingActive:hover:not(:disabled) {
+  background-color: #c9302c; /* 通常のホバーと同じ背景色 */
+  /* アイコン色は赤のまま */
+}
+
 /* ★ ミュートボタン (元のスタイル) */
 .mutedButton {
   background-color: #d9534f;

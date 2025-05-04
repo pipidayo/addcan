@@ -191,6 +191,7 @@ export default function CallControlsFooter({
     }
   }, [showDeviceSettings])
 
+  // ★ 画面共有ボタンのクリックハンドラ (Toast 表示ロジック含む)
   const handleScreenShareButtonClick = useCallback(() => {
     if (isScreenShareButtonDisabled) {
       // 他の人が共有中の場合、Toast を表示
@@ -273,9 +274,10 @@ export default function CallControlsFooter({
         </button>
         <button
           onClick={handleScreenShareButtonClick}
-          className={`${styles.controlButton} ${
-            isScreenSharing ? styles.activeStateButton : ''
-          }`}
+          className={`
+            ${styles.controlButton}
+            ${isScreenSharing ? styles.sharingActive : ''}
+          `}
           title={isScreenSharing ? '画面共有を停止' : '画面共有を開始'}
         >
           <FiMonitor />
