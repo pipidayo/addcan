@@ -9,36 +9,50 @@ import { FiClipboard, FiX, FiAlertCircle } from 'react-icons/fi'
 const WEBSOCKET_SERVER_URL =
   process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 'http://localhost:3001'
 
-type Props = {
-  name: string // Home から name を受け取る
-  router: ReturnType<typeof useRouter>
-  registerActions: (actions: { createRoom?: () => void }) => void
+type RoomControlActions = {
+  createRoom?: () => void
+  handleNameInputEnter?: () => void // ★ Enterキー用アクションを追加
 }
 
-export default function RoomControls({ name, router, registerActions }: Props) {
+type Props = {
+  name: string
+  router: ReturnType<typeof useRouter>
+  registerActions: (actions: RoomControlActions) => void
+  error: string | null // ルームコードのエラーメッセージを受け取る
+  showError: (
+    message: string,
+    target: 'name' | 'roomCode',
+    duration?: number
+  ) => void // エラー表示関数を受け取る
+  clearError: () => void // エラークリア関数を受け取る
+}
+
+export default function RoomControls({
+  name,
+  router,
+  registerActions,
+  error,
+  showError,
+  clearError,
+}: Props) {
   const [roomCodeInput, setRoomCodeInput] = useState('')
   const [isCheckingRoom, setIsCheckingRoom] = useState(false) // 確認中フラグを追加
   const [isInputFocused, setIsInputFocused] = useState(false) // ★ フォーカス状態
   const [isInputHovered, setIsInputHovered] = useState(false) // ★ ホバー状態
   const inputRef = useRef<HTMLInputElement>(null) // ★ input 要素への参照
-  const [roomCodeError, setRoomCodeError] = useState<string | null>(null)
-  const [errorTimeoutId, setErrorTimeoutId] = useState<NodeJS.Timeout | null>(
-    null
-  )
+
   // ★ 部屋を作成する処理 (useCallback でメモ化)
   const handleCreateRoom = useCallback(() => {
     if (!name.trim()) {
-      alert('名前を入力してください。')
+      showError('名前を入力してください。', 'name')
       return
     }
     // ★ localStorage に名前を保存
     localStorage.setItem('my_name', name)
-    console.log(`Saved name to localStorage: ${name}`) // 保存を確認 (デバッグ用)
-
-    // 新しいルームコードを生成して画面遷移
+    console.log(`Saved name to localStorage: ${name}`)
     const newRoomCode = 'room-' + Math.random().toString(36).substring(2, 8)
     router.push(`/room/${newRoomCode}`)
-  }, [name, router]) // ★ name と router に依存
+  }, [name, router, showError])
 
   // ★ ペースト処理
   const handlePaste = async () => {
@@ -59,33 +73,6 @@ export default function RoomControls({ name, router, registerActions }: Props) {
       )
     }
   }
-  // ★ エラーメッセージ表示と自動非表示タイマー設定のヘルパー関数
-  const showError = (message: string, duration: number = 4000) => {
-    // 4秒後に消える設定
-    // 既存のタイマーがあればクリア
-    if (errorTimeoutId) {
-      clearTimeout(errorTimeoutId)
-    }
-    setRoomCodeError(message)
-    // 新しいタイマーを設定
-    const newTimeoutId = setTimeout(() => {
-      setRoomCodeError(null)
-      setErrorTimeoutId(null)
-    }, duration)
-    setErrorTimeoutId(newTimeoutId)
-  }
-
-  // ★ エラーとタイマーをクリアするヘルパー関数
-  const clearError = () => {
-    if (roomCodeError) {
-      // エラーがある場合のみ処理
-      if (errorTimeoutId) {
-        clearTimeout(errorTimeoutId)
-        setErrorTimeoutId(null)
-      }
-      setRoomCodeError(null)
-    }
-  }
 
   // ★ クリア処理
   const handleClear = () => {
@@ -96,17 +83,16 @@ export default function RoomControls({ name, router, registerActions }: Props) {
   }
 
   // 部屋に参加する処理 (async に変更し、WebSocket 確認処理を追加)
-  const handleJoinRoom = async () => {
+  const handleJoinRoom = useCallback(async () => {
     clearError()
-    setRoomCodeError(null) // ★ 最初にエラーをクリア
     // 名前とルームコードのチェック (変更なし)
     if (!name.trim()) {
-      alert('名前を入力してください。')
+      showError('名前を入力してください。', 'name')
       return
     }
     const shortCode = roomCodeInput.trim()
     if (!shortCode) {
-      showError('ルームコードを入力してください。')
+      showError('ルームコードを入力してください。', 'roomCode')
       return
     }
 
@@ -183,18 +169,17 @@ export default function RoomControls({ name, router, registerActions }: Props) {
         // 遷移成功時は setIsCheckingRoom(false) は不要 (画面が変わるため)
       } else {
         // 部屋が存在しない場合
-        showError(`コードが間違っています`)
+        showError(`コードが間違っています`, 'roomCode')
         setIsCheckingRoom(false) // 確認完了、ボタンを有効化
       }
     } catch (error: unknown) {
       // any を unknown に変更
       console.error('Error checking room existence:', error)
-      // ★★★ error が Error インスタンスか確認 ★★★
       let errorMessage = '不明なエラー'
       if (error instanceof Error) {
         errorMessage = error.message
       }
-      showError(`確認失敗: ${errorMessage}`)
+      showError(`確認失敗: ${errorMessage}`, 'roomCode')
       setIsCheckingRoom(false)
     } finally {
       // 確認が終わったら必ず切断
@@ -203,27 +188,33 @@ export default function RoomControls({ name, router, registerActions }: Props) {
         socket.disconnect()
       }
     }
-  }
+  }, [name, roomCodeInput, router, showError, clearError])
 
-  // ★ useEffect を使って親コンポーネントに関数を登録
+  //  NameInput の Enter キー処理関数を追加
+  const handleNameInputEnter = useCallback(() => {
+    if (!name.trim()) {
+      showError('名前を入力してください。', 'name')
+      return
+    }
+    // コード入力欄が空かチェック
+    if (roomCodeInput.trim()) {
+      handleJoinRoom() // コードがあれば参加
+    } else {
+      handleCreateRoom() // コードがなければ作成
+    }
+    //  依存配列を設定
+  }, [name, roomCodeInput, handleJoinRoom, handleCreateRoom, showError])
+
+  // useEffect を使って親コンポーネントに関数を登録
   useEffect(() => {
     // createRoom アクションとして handleCreateRoom を登録
-    registerActions({ createRoom: handleCreateRoom })
+    registerActions({ createRoom: handleCreateRoom, handleNameInputEnter })
     // クリーンアップ: コンポーネントがアンマウントされたら登録解除 (任意)
     return () => {
       registerActions({})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [registerActions, handleCreateRoom]) // ★ registerActions と handleCreateRoom に依存
-
-  // ★ コンポーネントアンマウント時にタイマーをクリアする useEffect
-  useEffect(() => {
-    return () => {
-      if (errorTimeoutId) {
-        clearTimeout(errorTimeoutId)
-      }
-    }
-  }, [errorTimeoutId])
+  }, [registerActions, handleCreateRoom, handleNameInputEnter]) // ★ registerActions と handleCreateRoom に依存
 
   // アイコン表示条件 (変更なし)
   const canShowPaste = !isCheckingRoom
@@ -248,36 +239,39 @@ export default function RoomControls({ name, router, registerActions }: Props) {
         <input
           ref={inputRef}
           type='text'
-          className={`${styles.input} ${
-            roomCodeError ? styles.inputError : ''
-          }`}
+          className={`${styles.input} ${error ? styles.inputError : ''}`}
           placeholder='コードを入力'
           value={roomCodeInput}
           onChange={(e) => {
             setRoomCodeInput(e.target.value)
-            if (roomCodeError) {
-              // ★ エラーがあればクリア
-              clearError()
-            }
+            // ★ Props の clearError を使用
+            clearError()
           }}
           onFocus={() => setIsInputFocused(true)}
           onBlur={() => setIsInputFocused(false)}
-          disabled={isCheckingRoom} // 確認中は無効化
+          disabled={isCheckingRoom}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && roomCodeInput.trim() && name.trim()) {
-              handleJoinRoom()
+            if (e.key === 'Enter' && roomCodeInput.trim()) {
+              // ★ Enter 時にもエラーをクリア
+              clearError()
+              if (name.trim()) {
+                // 名前も入力されているか確認
+                handleJoinRoom()
+              } else {
+                showError('名前を入力してください。', 'name') // 名前がなければエラー表示
+              }
             }
           }}
           maxLength={6}
-          aria-invalid={!!roomCodeError}
-          aria-describedby={roomCodeError ? 'room-code-error' : undefined}
+          aria-invalid={!!error}
+          aria-describedby={error ? 'room-code-error' : undefined}
         />
 
         {/* ★ エラーメッセージ表示エリア */}
         <div className={styles.errorMessageContainer} aria-live='polite'>
           {' '}
           {/* aria-live を追加 */}
-          {roomCodeError && (
+          {error && (
             <>
               {' '}
               {/* Fragment を使用 */}
@@ -289,7 +283,7 @@ export default function RoomControls({ name, router, registerActions }: Props) {
               <p id='room-code-error' className={styles.errorMessage}>
                 {' '}
                 {/* id を追加 */}
-                {roomCodeError}
+                {error}
               </p>
             </>
           )}

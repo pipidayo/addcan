@@ -2,6 +2,7 @@
 .container {
   width: 100%;
   max-width: 360px; /* RoomControls と同じ最大幅を設定 */
+  position: relative; /* エラーメッセージの位置基準用 */
 }
 
 .input {
@@ -17,6 +18,7 @@
     border-color var(--transition-duration) ease,
     box-shadow var(--transition-duration) ease;
   box-shadow: var(--shadow);
+  padding-right: 60px;
 }
 
 .input::placeholder {
@@ -28,4 +30,93 @@
   outline: none;
   border-color: rgba(var(--input-border-color-focus-rgba));
   box-shadow: 0 0 0 3px rgba(var(--accent-color-primary-rgb), 0.3);
+}
+
+/* ★ 震えるアニメーション (RoomControls/styles.module.css にあれば不要) */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    /* 揺れ幅と回数を RoomControls と合わせる */
+    transform: translateX(-3px);
+  }
+  75% {
+    /* 揺れ幅と回数を RoomControls と合わせる */
+    transform: translateX(3px);
+  }
+}
+
+/* ★ エラー時のスタイル */
+.inputError {
+  border-color: var(
+    --error-color,
+    #e53e3e
+  ) !important; /* RoomControls と合わせる */
+  /* フォーカス時の影も赤系に (RoomControls と合わせる) */
+  &:focus {
+    box-shadow: 0 0 0 3px rgba(var(--error-rgb, 229, 62, 62), 0.3);
+  }
+  /* ★ 揺れアニメーションを RoomControls と合わせる */
+  animation: shake 0.6s ease-out;
+}
+
+/* ★ エラーメッセージのスタイル */
+.inputError {
+  border-color: var(
+    --error-color,
+    #e53e3e
+  ) !important; /* RoomControls と合わせる */
+  /* フォーカス時の影も赤系に (RoomControls と合わせる) */
+  &:focus {
+    box-shadow: 0 0 0 3px rgba(var(--error-rgb, 229, 62, 62), 0.3);
+  }
+  /* ★ 揺れアニメーションを RoomControls と合わせる */
+  animation: shake 0.6s ease-out;
+}
+
+/* ★★★ エラーメッセージコンテナのスタイル (RoomControls と合わせる) ★★★ */
+.errorMessageContainer {
+  position: absolute;
+  /* ★ アイコンがないので、右端からの位置を調整 (RoomControls の right: 60px より少し右に) */
+  right: 18px; /* input の padding-right と合わせるか、少し内側 */
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px; /* アイコンとテキストの間隔 */
+  /* 背景色などは任意 */
+  /* padding: 4px 8px; */
+  /* border-radius: var(--border-radius-small, 4px); */
+  opacity: 0; /* 初期状態は非表示 */
+  transition: opacity var(--transition-duration) ease;
+  z-index: 1;
+  pointer-events: none;
+  /* ★ 最大幅を調整 (アイコンがない分、少し広めでもOK) */
+  max-width: calc(100% - 36px); /* 左右の padding 分を引く程度 */
+}
+
+/* ★ エラーメッセージが表示されるときのスタイル (React側でクラス付与を想定) */
+.visible {
+  opacity: 1;
+}
+
+/* ★ エラーアイコンのスタイル (RoomControls と合わせる) */
+.errorIcon {
+  color: var(--error-color, #e53e3e);
+  flex-shrink: 0;
+  font-size: 1em; /* メッセージと同じくらい */
+}
+
+/* ★ エラーメッセージのスタイル (RoomControls と合わせる) */
+.errorMessageName {
+  /* クラス名は NameInput 用のまま */
+  color: var(--error-color, #e53e3e);
+  font-size: 0.875rem;
+  margin: 0;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
