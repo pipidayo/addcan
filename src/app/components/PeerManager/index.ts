@@ -905,10 +905,28 @@ export class PeerManager {
       console.log(
         '[PeerManager] Requesting screen share stream (VIDEO + AUDIO)'
       )
-      this.screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true, // 音声も要求
-      })
+      try {
+        this.screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        })
+      } catch (err: unknown) {
+        // ユーザーによるキャンセル (NotAllowedError) かどうかを判定
+        if (err instanceof Error && err.name === 'NotAllowedError') {
+          console.log('[PeerManager] Screen share cancelled by user.')
+          // キャンセルされた場合は、共有状態にせず、静かに終了する
+          // isCurrentlyScreenSharing は false のまま
+          this.cleanupScreenShareResources() // 念のためリソース解放
+          // エラーを再スローしない、または特定の目印をつけて再スロー
+          // throw new Error('Screen share cancelled'); // 例: キャンセルを示すエラー
+          return
+        } else {
+          // その他のエラー (デバイスが見つからないなど)
+          console.error('[PeerManager] Error getting display media:', err)
+          // ★ 他のエラーは呼び出し元に投げる
+          throw err
+        }
+      }
 
       screenVideoTrack = this.screenStream.getVideoTracks()[0]
       const screenAudioTrack = this.screenStream.getAudioTracks()[0] // 画面共有の音声トラック
@@ -994,6 +1012,7 @@ export class PeerManager {
         )
         this.cleanupAudioMixingResources() // 作成途中のリソースがあれば解放
       }
+
       //  共有状態フラグを立てる
       this.isCurrentlyScreenSharing = true
       // --- ここまで音声ミックス処理 ---
