@@ -99,7 +99,6 @@
   /* ↓↓↓ アイコン色を赤に設定 ↓↓↓ */
   color: white;
   /* ↓↓↓ 背景色は変えない (または少し変える) ↓↓↓ */
-  /* background-color: #5a5e6a; */
 }
 /* 共有中のホバー */
 .sharingActive:hover:not(:disabled) {
