@@ -6,7 +6,7 @@ const { Server } = require('socket.io')
 const httpServer = createServer()
 const io = new Server(httpServer, {
   cors: {
-    origin: '*', // 本番環境では適切なオリジンを指定してください
+    origin: 'https://addcan-w8gj.vercel.app', // 本番環境では適切なオリジンを指定してください
     methods: ['GET', 'POST'],
   },
 })
@@ -328,7 +328,7 @@ io.on('connection', (socket) => {
   )
 })
 
-const PORT = 3001
+const PORT = process.env.PORT || 3001 // 環境変数 PORT があればそれを使用し、なければ 3001 を使う
 httpServer.listen(PORT, () => {
   console.log(`WebSocket server listening on port ${PORT}`)
 })
