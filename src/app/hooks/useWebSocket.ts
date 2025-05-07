@@ -6,6 +6,10 @@ import { useRouter } from 'next/navigation' // エラー時のリダイレクト
 // WebSocket サーバーの URL
 const WEBSOCKET_SERVER_URL =
   process.env.NEXT_PUBLIC_WEBSOCKET_SERVER_URL || 'http://localhost:3001'
+console.log(
+  '[useWebSocket] Determined WEBSOCKET_SERVER_URL:',
+  WEBSOCKET_SERVER_URL
+)
 
 // --- 型定義
 import type {
