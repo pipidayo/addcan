@@ -12,10 +12,12 @@ httpServer.listen(port, () => {
 })
 
 const io = new Server(httpServer, {
-  cors: {
-    origin: 'https://addcan-w8gj.vercel.app', // 本番環境では適切なオリジンを指定してください
-    methods: ['GET', 'POST'],
-  },
+  origin: [
+    'https://addcan-tids-lb9yz4ta9-pipidayos-projects.vercel.app', // 現在エラーが出ているオリジン
+    'https://addcan-w8gj.vercel.app', // 以前のプレビューオリジン (念のため)
+    // 'https://your-production-domain.com', // もしあれば本番用ドメイン
+    'http://localhost:3000', // ローカル開発用
+  ],
 })
 
 const rooms = {}
