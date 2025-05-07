@@ -4,6 +4,13 @@ const { createServer } = require('http')
 const { Server } = require('socket.io')
 
 const httpServer = createServer()
+
+const port = process.env.PORT || 10000 // Renderが提供するPORT環境変数を使用。なければローカル開発用に10000など。
+
+httpServer.listen(port, () => {
+  console.log(`WebSocket server listening on port ${port}`)
+})
+
 const io = new Server(httpServer, {
   cors: {
     origin: 'https://addcan-w8gj.vercel.app', // 本番環境では適切なオリジンを指定してください
@@ -326,9 +333,4 @@ io.on('connection', (socket) => {
   console.log(
     `Connection handler finished setting up listeners for socket ID: ${socket.id}`
   )
-})
-
-const PORT = process.env.PORT || 3001 // 環境変数 PORT があればそれを使用し、なければ 3001 を使う
-httpServer.listen(PORT, () => {
-  console.log(`WebSocket server listening on port ${PORT}`)
 })
