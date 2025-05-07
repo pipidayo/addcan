@@ -15,6 +15,9 @@
     76, 29, 149; /* さらに濃い紫 RGB (#4c1d95) */
   --accent-color-primary-active-rgb: 67, 20, 119; /* 最も濃い紫 RGB (#431477) */
 
+  --accent-color-speaking-rgb: 14, 165, 233;
+  --muted-red-rgb: 220, 38, 38;
+
   /* 色 (その他) */
   --icon-color-muted: #dc2626; /* 赤 */
   --border-color-subtle-rgb: 255, 255, 255; /* 白 (ボーダー用) */
