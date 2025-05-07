@@ -1,12 +1,4 @@
 /* src/app/components/CallControlsFooter/styles.module.css */
-:root {
-  --accent-color-speaking-rgb: 14, 165, 233; /* 水色 RGB (例: sky-500) */
-  /* 紫の変数も必要なら残す */
-  --accent-color-primary-rgb: 91, 33, 182;
-  /* 赤色の変数も定義しておくと便利 */
-  --muted-red-rgb: 220, 38, 38;
-}
-
 .footerContainer {
   position: fixed;
   bottom: 0;
