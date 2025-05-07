@@ -3,7 +3,26 @@
 const { createServer } = require('http')
 const { Server } = require('socket.io')
 
-const httpServer = createServer()
+// HTTPサーバーを作成し、基本的なリクエストに応答できるようにする
+const httpServer = createServer((req, res) => {
+  if (req.url === '/health' && req.method === 'GET') {
+    // 例: /health エンドポイント
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('OK')
+  } else if (req.url === '/' && req.method === 'GET') {
+    // 例: ルートパスへの応答
+    res.writeHead(200, { 'Content-Type': 'text/plain' })
+    res.end('Socket.IO Server is running')
+  } else {
+    // Socket.IO以外のリクエストはここでは処理しないか、404を返す
+    // res.writeHead(404);
+    // res.end();
+    // 重要: Socket.IOの処理を妨げないように注意。
+    // 通常、Socket.IOライブラリが自身のパス(/socket.io/)を処理するので、
+    // ここで全ての不明なリクエストに404を返すと問題が起きる可能性も。
+    // 上記の /health や / だけで十分な場合が多い。
+  }
+})
 
 const port = process.env.PORT || 10000 // Renderが提供するPORT環境変数を使用。なければローカル開発用に10000など。
 
@@ -12,12 +31,15 @@ httpServer.listen(port, () => {
 })
 
 const io = new Server(httpServer, {
-  origin: [
-    'https://addcan-tids-lb9yz4ta9-pipidayos-projects.vercel.app', // 現在エラーが出ているオリジン
-    'https://addcan-w8gj.vercel.app', // 以前のプレビューオリジン (念のため)
-    // 'https://your-production-domain.com', // もしあれば本番用ドメイン
-    'http://localhost:3000', // ローカル開発用
-  ],
+  cors: {
+    origin: [
+      'https://addcan-tids-lb9yz4ta9-pipidayos-projects.vercel.app', // 現在エラーが出ているオリジン
+      'https://addcan-w8gj.vercel.app', // 以前のプレビューオリジン (念のため)
+      // 'https://your-production-domain.com', // もしあれば本番用ドメイン
+      'http://localhost:3000', // ローカル開発用
+    ],
+    methods: ['GET', 'POST'], // methods も cors オブジェクト内に移動
+  },
 })
 
 const rooms = {}
