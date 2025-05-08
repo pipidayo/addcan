@@ -33,9 +33,7 @@ httpServer.listen(port, () => {
 const io = new Server(httpServer, {
   cors: {
     origin: [
-      'https://addcan-owgbvpaqr-pipidayos-projects.vercel.app', // 現在エラーが出ているオリジン
-      'https://addcan-w8gj.vercel.app', // 以前のプレビューオリジン (念のため)
-      // 'https://your-production-domain.com', // もしあれば本番用ドメイン
+      'https://addcan.vercel.app', // 本番用ドメイン
       'http://localhost:3000', // ローカル開発用
     ],
     methods: ['GET', 'POST'], // methods も cors オブジェクト内に移動
