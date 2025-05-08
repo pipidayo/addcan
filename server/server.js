@@ -26,8 +26,12 @@ const httpServer = createServer((req, res) => {
 
 const port = process.env.PORT || 10000 // Renderが提供するPORT環境変数を使用。なければローカル開発用に10000など。
 
-httpServer.listen(port, () => {
-  console.log(`WebSocket server listening on port ${port}`)
+console.log(`[Server ENV] 環境変数 process.env.PORT の値: ${process.env.PORT}`)
+console.log(`[Server ENV] サーバーが使用するポート: ${port}`)
+
+httpServer.listen(port, '0.0.0.0', () => {
+  // 明示的に 0.0.0.0 でリッスン
+  console.log(`WebSocket server listening on 0.0.0.0:${port}`)
 })
 
 const io = new Server(httpServer, {
