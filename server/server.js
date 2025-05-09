@@ -37,6 +37,7 @@ httpServer.listen(port, '0.0.0.0', () => {
 const io = new Server(httpServer, {
   cors: {
     origin: [
+      'https://addcan-hhpg5ffuw-pipidayos-projects.vercel.app',
       'https://addcan.vercel.app', // 本番用ドメイン
       'http://localhost:3000', // ローカル開発用
     ],
