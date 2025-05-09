@@ -24,10 +24,18 @@ const httpServer = createServer((req, res) => {
   }
 })
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+
 const port = process.env.PORT || 10000 // Renderが提供するPORT環境変数を使用。なければローカル開発用に10000など。
 
-console.log(`[Server ENV] 環境変数 process.env.PORT の値: ${process.env.PORT}`)
-console.log(`[Server ENV] サーバーが使用するポート: ${port}`)
+function debugLog(...args) {
+  if (!IS_PRODUCTION) {
+    console.log(...args)
+  }
+}
+
+debugLog(`[Server ENV] 環境変数 process.env.PORT の値: ${process.env.PORT}`)
+debugLog(`[Server ENV] サーバーが使用するポート: ${port}`)
 
 httpServer.listen(port, '0.0.0.0', () => {
   // 明示的に 0.0.0.0 でリッスン
@@ -49,8 +57,8 @@ const rooms = {}
 const peerIdToSocketId = new Map()
 
 io.on('connection', (socket) => {
-  console.log(`Connection handler started for socket ID: ${socket.id}`)
-  console.log(`User connected: ${socket.id}`)
+  debugLog(`[Server] Connection handler started for socket ID: ${socket.id}`)
+  debugLog(`[Server] User connected: ${socket.id}`)
 
   // socket オブジェクトにカスタムプロパティを追加して情報を保持
   socket.currentPeerId = null
@@ -66,15 +74,13 @@ io.on('connection', (socket) => {
       })
       return
     }
-    console.log(
-      `[Server] Received join-room from ${peerId} for room ${roomCode}`
-    )
+    debugLog(`[Server] Received join-room from ${peerId} for room ${roomCode}`)
 
     // 以前の接続情報があればクリーンアップ (念のため)
     // (同じ peerId で再接続した場合など)
     const oldSocketId = peerIdToSocketId.get(peerId)
     if (oldSocketId && oldSocketId !== socket.id) {
-      console.log(`[Server] Cleaning up old socket mapping for peer ${peerId}`)
+      debugLog(`[Server] Cleaning up old socket mapping for peer ${peerId}`)
       // 必要であれば、古いソケットに関連するルーム情報などもクリーンアップ
       const oldSocket = io.sockets.sockets.get(oldSocketId)
       if (oldSocket) {
@@ -86,7 +92,7 @@ io.on('connection', (socket) => {
     socket.currentRoomCode = roomCode
     //  Peer ID と Socket ID を紐付け
     peerIdToSocketId.set(peerId, socket.id)
-    console.log(`[Server] Mapped peer ${peerId} to socket ${socket.id}`)
+    debugLog(`[Server] Mapped peer ${peerId} to socket ${socket.id}`)
 
     // 部屋が存在しなければ作成
     if (!rooms[roomCode]) {
@@ -95,14 +101,14 @@ io.on('connection', (socket) => {
         participants: {},
         sharerPeerId: null, // 共有者は最初はいない
       }
-      console.log(`[Server] Room created: ${roomCode}`)
+      debugLog(`[Server] Room created: ${roomCode}`)
     }
 
     const room = rooms[roomCode] // 以降 room 変数を使用
 
     // 既存の参加者リストを取得 (自分自身を除く)
     const existingParticipants = { ...room.participants } // ★ participants から取得
-    console.log(
+    debugLog(
       `[Server join-room] Preparing 'existing-participants' for ${peerId}. Data:`,
       JSON.stringify(existingParticipants)
     )
@@ -110,14 +116,14 @@ io.on('connection', (socket) => {
     socket.join(roomCode)
     // 参加者を追加/更新
     room.participants[peerId] = name // ★ participants に追加
-    console.log(`${name} (${peerId}) joined/updated room: ${roomCode}`)
-    console.log(
+    debugLog(`${name} (${peerId}) joined/updated room: ${roomCode}`)
+    debugLog(
       '[Server join-room] Current rooms state AFTER join:',
       JSON.stringify(rooms) // デバッグ用に rooms 全体を出力
     )
 
     // 他の参加者に通知 (自分自身を除く)
-    console.log(
+    debugLog(
       `[Server join-room] Broadcasting 'user-joined' to room ${roomCode}. Payload:`,
       { peerId, name }
     )
@@ -129,7 +135,7 @@ io.on('connection', (socket) => {
       if (sharerSocketId) {
         const sharerSocket = io.sockets.sockets.get(sharerSocketId) // ★ 共有者の Socket オブジェクトを取得
         if (sharerSocket) {
-          console.log(
+          debugLog(
             `[Server] Notifying sharer ${room.sharerPeerId} (socket ${sharerSocketId}) to share with new peer ${peerId}`
           )
           // ★ 共有者だけに通知を送信
@@ -150,8 +156,8 @@ io.on('connection', (socket) => {
 
     // 参加者に既存の参加者リストと現在の共有者IDを送信
     const participantsToSend = { ...existingParticipants }
-    console.log(
-      `[Server join-room] Sending 'existing-participants' to ${peerId}. Payload:`,
+    debugLog(
+      `[Server join-room] Sending 'room-state' to ${peerId}. Payload:`,
       JSON.stringify({
         participants: participantsToSend,
         currentSharerId: room.sharerPeerId,
@@ -172,7 +178,7 @@ io.on('connection', (socket) => {
       return
     }
     const roomExists = rooms.hasOwnProperty(roomCode)
-    console.log(
+    debugLog(
       `[Server check-room-exists] Room ${roomCode} exists: ${roomExists}`
     )
     if (typeof callback === 'function') {
@@ -207,10 +213,10 @@ io.on('connection', (socket) => {
     if (room.sharerPeerId === null) {
       // 誰も共有していない -> 共有開始OK
       room.sharerPeerId = peerId // 共有者IDを設定
-      console.log(
+      debugLog(
         `[Server request-start-share] User ${peerId} allowed to share in room ${roomCode}.`
       )
-      console.log(
+      debugLog(
         `[Server request-start-share] Calling callback with success: true for ${peerId}`
       )
 
@@ -224,10 +230,10 @@ io.on('connection', (socket) => {
       })
     } else {
       // 既に誰かが共有中 -> 共有開始NG
-      console.log(
+      debugLog(
         `[Server request-start-share] User ${peerId} denied sharing in room ${roomCode} (Already shared by ${room.sharerPeerId}).`
       )
-      console.log(
+      debugLog(
         `[Server request-start-share] Calling callback with success: false for ${peerId}`
       )
 
@@ -258,7 +264,7 @@ io.on('connection', (socket) => {
 
     if (room.sharerPeerId === peerId) {
       // 自分が共有者だった場合 -> 停止処理
-      console.log(
+      debugLog(
         `[Server notify-stop-share] User ${peerId} stopped sharing in room ${roomCode}.`
       )
       room.sharerPeerId = null // 共有者IDをリセット
@@ -278,20 +284,21 @@ io.on('connection', (socket) => {
 
   // --- 切断イベント ---
   socket.on('disconnect', () => {
-    console.log(`[Server] disconnect event for socket ID: ${socket.id}`)
+    debugLog(`[Server] disconnect event for socket ID: ${socket.id}`)
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
 
     // Peer ID と Socket ID の紐付けを解除
     if (peerId) {
       peerIdToSocketId.delete(peerId)
-      console.log(`[Server] Unmapped peer ${peerId} from socket ${socket.id}`)
+      debugLog(`[Server] Unmapped peer ${peerId} from socket ${socket.id}`)
     }
 
-    console.log(
+    debugLog(
       `[Server disconnect] Before cleanup: Peer ID: ${peerId}, Room: ${roomCode}`
     )
-    console.log(
+    debugLog(
+      '[Server disconnect] Current rooms state BEFORE delete:',
       '[Server disconnect] Current rooms state BEFORE delete:',
       JSON.stringify(rooms)
     )
@@ -302,7 +309,7 @@ io.on('connection', (socket) => {
 
       if (room.participants[peerId]) {
         // ★ participants を確認
-        console.log(
+        debugLog(
           `[Server disconnect] Removing ${peerId} (${room.participants[peerId]}) from room ${roomCode}`
         )
 
@@ -312,7 +319,7 @@ io.on('connection', (socket) => {
         delete room.participants[peerId] // ★ participants から削除
 
         // 他の参加者に退出を通知
-        console.log(
+        debugLog(
           `[Server disconnect] Broadcasting 'user-left' to room ${roomCode}. Payload:`,
           { peerId }
         )
@@ -321,7 +328,7 @@ io.on('connection', (socket) => {
 
         // ★ もし退出した人が画面共有中だったら、それも通知 ★
         if (wasSharing) {
-          console.log(
+          debugLog(
             `[Server disconnect] Broadcasting screen share stop because sharer ${peerId} left room ${roomCode}.`
           )
           room.sharerPeerId = null // 共有者IDをリセット
@@ -336,7 +343,7 @@ io.on('connection', (socket) => {
         // 部屋に誰もいなくなったら部屋を削除
         if (Object.keys(room.participants).length === 0) {
           // ★ participants を確認
-          console.log(
+          debugLog(
             `[Server disconnect] Room ${roomCode} is empty, deleting room.`
           )
           delete rooms[roomCode]
@@ -347,17 +354,17 @@ io.on('connection', (socket) => {
         )
       }
     } else {
-      console.log(
+      debugLog(
         `[Server disconnect] User ${socket.id} (Peer ID: ${peerId}) was not in a room or room data inconsistent.`
       )
     }
-    console.log(
+    debugLog(
       '[Server disconnect] Current rooms state AFTER delete:',
       JSON.stringify(rooms)
     )
   })
 
-  console.log(
-    `Connection handler finished setting up listeners for socket ID: ${socket.id}`
+  debugLog(
+    `[Server] Connection handler finished setting up listeners for socket ID: ${socket.id}`
   )
 })
