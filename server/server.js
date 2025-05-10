@@ -1,4 +1,8 @@
 // server.js (修正版 - check-room-exists イベントハンドラ追加)
+console.log(
+  '[SERVER SCRIPT START] server.js is being executed. Timestamp:',
+  new Date().toISOString()
+)
 
 const { createServer } = require('http')
 const { Server } = require('socket.io')
