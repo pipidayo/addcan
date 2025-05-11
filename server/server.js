@@ -174,7 +174,7 @@ io.on('connection', (socket) => {
     })
   })
 
-  // ★★★ ここから追加: 部屋存在確認イベント ★★★
+  // ここから追加: 部屋存在確認イベント
   socket.on('check-room-exists', ({ roomCode }, callback) => {
     if (!roomCode) {
       if (typeof callback === 'function') callback({ exists: false })
