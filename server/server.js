@@ -18,13 +18,6 @@ const httpServer = createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' })
     res.end('Socket.IO Server is running')
   } else {
-    // Socket.IO以外のリクエストはここでは処理しないか、404を返す
-    // res.writeHead(404);
-    // res.end();
-    // 重要: Socket.IOの処理を妨げないように注意。
-    // 通常、Socket.IOライブラリが自身のパス(/socket.io/)を処理するので、
-    // ここで全ての不明なリクエストに404を返すと問題が起きる可能性も。
-    // 上記の /health や / だけで十分な場合が多い。
   }
 })
 
