@@ -34,6 +34,12 @@ function debugLog(...args) {
 debugLog(`[Server ENV] 環境変数 process.env.PORT の値: ${process.env.PORT}`)
 debugLog(`[Server ENV] サーバーが使用するポート: ${port}`)
 
+// --- Renderデバッグ用に追加 ---
+console.log(`[SERVER DEBUG] Raw process.env.PORT: ${process.env.PORT}`)
+console.log(`[SERVER DEBUG] IS_PRODUCTION: ${IS_PRODUCTION}`)
+console.log(`[SERVER DEBUG] Calculated port: ${port}`)
+// --- Renderデバッグ用ここまで ---
+
 httpServer.listen(port, '0.0.0.0', () => {
   // 明示的に 0.0.0.0 でリッスン
   console.log(`WebSocket server listening on 0.0.0.0:${port}`)
