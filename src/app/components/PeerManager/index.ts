@@ -706,12 +706,18 @@ export class PeerManager {
     console.log(
       `[PeerManager instance ${this.peer?.id}] Replacing ${kind} track for all connections. New track info: id=${newTrack?.id}, kind=${newTrack?.kind}, readyState=${newTrack?.readyState}`
     )
-    if (Object.keys(this.mediaConnections).length === 0) {
+    const peerIds = Object.keys(this.mediaConnections)
+    console.log(
+      `[PeerManager replaceTrackForAllConnections] Active media connections: ${peerIds.length}`
+    )
+
+    if (peerIds.length === 0) {
       console.log(
         `[PeerManager instance ${this.peer?.id}] No media connections to replace track on.`
       )
       return
     }
+    const replacePromises: Promise<void>[] = []
 
     // 音声通話用の接続 (mediaConnections) に対してのみ処理を行う
     for (const peerId in this.mediaConnections) {
@@ -726,42 +732,49 @@ export class PeerManager {
           .find((s) => s.track?.kind === kind)
         if (sender) {
           console.log(
-            `[PeerManager instance ${this.peer?.id}] Found sender for ${kind} track for connection with ${peerId}. Current track: ${sender.track?.id ?? 'null'}`
+            `[PeerManager replaceTrackForAllConnections] Found sender for ${kind} track for connection with ${peerId}. Current track ID: ${sender.track?.id ?? 'null'}, Current track State: ${sender.track?.readyState ?? 'N/A'}`
           )
-          try {
-            console.log(
-              `[PeerManager instance ${this.peer?.id}] Attempting sender.replaceTrack() for ${peerId}...`
-            )
-            // ★ newTrack が null でないか、readyState が 'live' か確認
-            if (newTrack && newTrack.readyState !== 'live') {
-              console.warn(
-                `[PeerManager instance ${this.peer?.id}] Attempting to replace with a non-live track (${newTrack.readyState}) for ${peerId}.`
-              )
-            }
-            await sender.replaceTrack(newTrack)
-            console.log(
-              `[PeerManager instance ${this.peer?.id}] Successfully replaced ${kind} track for ${peerId}. New track: ${sender.track?.id ?? 'null'}`
-            )
-          } catch (replaceError) {
-            console.error(
-              `[PeerManager instance ${this.peer?.id}] Failed to replace ${kind} track for ${peerId}:`,
-              replaceError,
-              // エラーオブジェクトの詳細も表示
-              replaceError instanceof Error ? replaceError.name : '',
-              replaceError instanceof Error ? replaceError.message : ''
-            )
-          }
+          replacePromises.push(
+            (async () => {
+              // Promise を配列に追加
+              try {
+                console.log(
+                  `[PeerManager instance ${this.peer?.id}] Attempting sender.replaceTrack() for ${peerId}...`
+                )
+                // ★ newTrack が null でないか、readyState が 'live' か確認
+                if (newTrack && newTrack.readyState !== 'live') {
+                  console.warn(
+                    `[PeerManager replaceTrackForAllConnections] WARNING: Attempting to replace with a non-live track (ID: ${newTrack.id}, State: ${newTrack.readyState}) for ${peerId}.`
+                  )
+                }
+                await sender.replaceTrack(newTrack)
+                console.log(
+                  `[PeerManager replaceTrackForAllConnections] Successfully replaced ${kind} track for ${peerId}. New sender track ID: ${sender.track?.id ?? 'null'}`
+                )
+              } catch (replaceError) {
+                console.error(
+                  `[PeerManager instance ${this.peer?.id}] Failed to replace ${kind} track for ${peerId}:`,
+                  replaceError,
+                  // エラーオブジェクトの詳細も表示
+                  replaceError instanceof Error ? replaceError.name : '',
+                  replaceError instanceof Error ? replaceError.message : ''
+                )
+              }
+            })()
+          ) // 即時実行して Promise を返す
         } else {
           console.warn(
-            `[PeerManager instance ${this.peer?.id}] Could not find sender for ${kind} track for ${peerId}.`
+            `[PeerManager replaceTrackForAllConnections] Could not find sender for ${kind} track for ${peerId}.`
           )
         }
       } else {
         console.warn(
-          `[PeerManager instance ${this.peer?.id}] No peerConnection found for media connection with ${peerId}.`
+          `[PeerManager replaceTrackForAllConnections] No peerConnection found for media connection with ${peerId}.`
         )
       }
     }
+    // すべての replaceTrack 処理が完了するのを待つ
+    await Promise.all(replacePromises)
   }
 
   public async switchMicrophone(newDeviceId: string) {
@@ -776,13 +789,13 @@ export class PeerManager {
       const newAudioTrack = newStream.getAudioTracks()[0]
       if (!newAudioTrack) {
         console.error(
-          `[PeerManager instance ${this.peer?.id}] Failed to get new audio track after switching device.`
+          `[PeerManager switchMicrophone] Failed to get new audio track after switching device.`
         )
         throw new Error('Failed to get new audio track.')
       }
       if (newAudioTrack.readyState !== 'live') {
         console.warn(
-          `[PeerManager instance ${this.peer?.id}] New audio track for mic switch is not live. State: ${newAudioTrack.readyState}`
+          `[PeerManager switchMicrophone] New audio track (ID: ${newAudioTrack.id}) for mic switch is not live. State: ${newAudioTrack.readyState}. Attempting to use anyway.`
         )
         // ライブでないトラックを処理するかどうかは要件による
       }
@@ -792,7 +805,7 @@ export class PeerManager {
       // 2. 画面共有中の場合、ミキサーの入力と画面共有接続の送信トラックも更新
       if (this.isCurrentlyScreenSharing && this.audioMixingResources) {
         console.log(
-          `[PeerManager instance ${this.peer?.id}] Updating microphone source for active audio mixer and screen share connections.`
+          `[PeerManager switchMicrophone] Updating microphone source for active audio mixer. New mic track ID: ${newAudioTrack.id}`
         )
         const { audioContext, destination } = this.audioMixingResources
 
@@ -801,11 +814,11 @@ export class PeerManager {
           try {
             this.audioMixingResources.micSource.disconnect(destination)
             console.log(
-              `[PeerManager instance ${this.peer?.id}] Disconnected old micSource from mixer destination.`
+              `[PeerManager switchMicrophone] Disconnected old micSource (ID: ${this.audioMixingResources.micSource.mediaStream.getAudioTracks()[0]?.id}) from mixer destination.`
             )
           } catch (e) {
             console.warn(
-              `[PeerManager instance ${this.peer?.id}] Error disconnecting old micSource:`,
+              `[PeerManager switchMicrophone] Error disconnecting old micSource:`,
               e
             )
           }
@@ -819,7 +832,7 @@ export class PeerManager {
         newMicSourceNode.connect(destination)
         this.audioMixingResources.micSource = newMicSourceNode // ストアされているマイクソースを更新
         console.log(
-          `[PeerManager instance ${this.peer?.id}] Connected new micSource to mixer destination.`
+          `[PeerManager switchMicrophone] Connected new micSource (from track ID: ${newAudioTrack.id}) to mixer destination.`
         )
 
         // c. 新しいミックス音声トラックを取得 (これは destination.stream から動的に取得される)
@@ -830,10 +843,10 @@ export class PeerManager {
           updatedMixedAudioTrack &&
           updatedMixedAudioTrack.readyState === 'live'
         ) {
-          // ★★★ audioMixingResources の mixedAudioTrack プロパティを新しいミックス音声トラックで更新 ★★★
+          // audioMixingResources の mixedAudioTrack プロパティを新しいミックス音声トラックで更新
           this.audioMixingResources.mixedAudioTrack = updatedMixedAudioTrack
           console.log(
-            `[PeerManager instance ${this.peer?.id}] Updated this.audioMixingResources.mixedAudioTrack to ID: ${updatedMixedAudioTrack.id}`
+            `[PeerManager switchMicrophone] Updated this.audioMixingResources.mixedAudioTrack to ID: ${updatedMixedAudioTrack.id}, State: ${updatedMixedAudioTrack.readyState}`
           )
 
           // d. 各画面共有接続の音声トラックを新しいミックス音声トラックに置き換える
@@ -857,7 +870,7 @@ export class PeerManager {
                   )
 
                   console.log(
-                    `[PeerManager instance ${this.peer?.id}] Successfully replaced audio track for screen share with ${peerId}.`
+                    `[PeerManager switchMicrophone] Successfully replaced audio track for screen share with ${peerId}. New sender track ID: ${sender.track?.id}`
                   )
                 } catch (err) {
                   console.error(
@@ -874,13 +887,13 @@ export class PeerManager {
           }
         } else {
           console.warn(
-            `[PeerManager instance ${this.peer?.id}] Could not get a live updated mixed audio track for screen share. Track state: ${updatedMixedAudioTrack?.readyState}`
+            `[PeerManager switchMicrophone] Could not get a live updated mixed audio track for screen share. Track state: ${updatedMixedAudioTrack?.readyState}`
           )
         }
       }
 
       console.log(
-        `[PeerManager instance ${this.peer?.id}] Microphone switched successfully.`
+        `[PeerManager switchMicrophone] Microphone switched successfully to device ID: ${newDeviceId}. Final localStream audio track ID: ${this.localStream?.getAudioTracks()[0]?.id}`
       )
     } catch (error) {
       console.error(
