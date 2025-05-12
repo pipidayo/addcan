@@ -826,10 +826,19 @@ export class PeerManager {
         const updatedMixedAudioTrack =
           this.audioMixingResources.destination.stream.getAudioTracks()[0]
 
-        if (updatedMixedAudioTrack) {
+        if (
+          updatedMixedAudioTrack &&
+          updatedMixedAudioTrack.readyState === 'live'
+        ) {
+          // ★★★ audioMixingResources の mixedAudioTrack プロパティを新しいミックス音声トラックで更新 ★★★
+          this.audioMixingResources.mixedAudioTrack = updatedMixedAudioTrack
+          console.log(
+            `[PeerManager instance ${this.peer?.id}] Updated this.audioMixingResources.mixedAudioTrack to ID: ${updatedMixedAudioTrack.id}`
+          )
+
           // d. 各画面共有接続の音声トラックを新しいミックス音声トラックに置き換える
           console.log(
-            `[PeerManager instance ${this.peer?.id}] Replacing audio track for active screen share connections.`
+            `[PeerManager instance ${this.peer?.id}] Replacing audio track for active screen share connections with new mixed track (ID: ${this.audioMixingResources.mixedAudioTrack.id}).`
           )
           for (const peerId in this.screenMediaConnections) {
             const conn = this.screenMediaConnections[peerId]
@@ -842,7 +851,11 @@ export class PeerManager {
                 .find((s) => s.track?.kind === 'audio')
               if (sender) {
                 try {
-                  await sender.replaceTrack(updatedMixedAudioTrack)
+                  // 必ず更新された this.audioMixingResources.mixedAudioTrack を使用
+                  await sender.replaceTrack(
+                    this.audioMixingResources.mixedAudioTrack
+                  )
+
                   console.log(
                     `[PeerManager instance ${this.peer?.id}] Successfully replaced audio track for screen share with ${peerId}.`
                   )
@@ -861,7 +874,7 @@ export class PeerManager {
           }
         } else {
           console.warn(
-            `[PeerManager instance ${this.peer?.id}] Could not get updated mixed audio track for screen share.`
+            `[PeerManager instance ${this.peer?.id}] Could not get a live updated mixed audio track for screen share. Track state: ${updatedMixedAudioTrack?.readyState}`
           )
         }
       }
