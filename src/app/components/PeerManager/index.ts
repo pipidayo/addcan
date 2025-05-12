@@ -774,8 +774,98 @@ export class PeerManager {
     try {
       const newStream = await this.getLocalStream(newDeviceId)
       const newAudioTrack = newStream.getAudioTracks()[0]
-      if (!newAudioTrack) throw new Error('Failed to get new audio track.')
+      if (!newAudioTrack) {
+        console.error(
+          `[PeerManager instance ${this.peer?.id}] Failed to get new audio track after switching device.`
+        )
+        throw new Error('Failed to get new audio track.')
+      }
+      if (newAudioTrack.readyState !== 'live') {
+        console.warn(
+          `[PeerManager instance ${this.peer?.id}] New audio track for mic switch is not live. State: ${newAudioTrack.readyState}`
+        )
+        // ライブでないトラックを処理するかどうかは要件による
+      }
+
+      // 1. 通常の音声通話接続のトラックを更新
       await this.replaceTrackForAllConnections(newAudioTrack, 'audio')
+      // 2. 画面共有中の場合、ミキサーの入力と画面共有接続の送信トラックも更新
+      if (this.isCurrentlyScreenSharing && this.audioMixingResources) {
+        console.log(
+          `[PeerManager instance ${this.peer?.id}] Updating microphone source for active audio mixer and screen share connections.`
+        )
+        const { audioContext, destination } = this.audioMixingResources
+
+        // a. 古いマイクソースを切断
+        if (this.audioMixingResources.micSource) {
+          try {
+            this.audioMixingResources.micSource.disconnect(destination)
+            console.log(
+              `[PeerManager instance ${this.peer?.id}] Disconnected old micSource from mixer destination.`
+            )
+          } catch (e) {
+            console.warn(
+              `[PeerManager instance ${this.peer?.id}] Error disconnecting old micSource:`,
+              e
+            )
+          }
+        }
+
+        // b. 新しいマイクソースを作成して接続
+        const newMicStreamForMixing = new MediaStream([newAudioTrack]) // 新しいトラックから新しいストリームを作成
+        const newMicSourceNode = audioContext.createMediaStreamSource(
+          newMicStreamForMixing
+        )
+        newMicSourceNode.connect(destination)
+        this.audioMixingResources.micSource = newMicSourceNode // ストアされているマイクソースを更新
+        console.log(
+          `[PeerManager instance ${this.peer?.id}] Connected new micSource to mixer destination.`
+        )
+
+        // c. 新しいミックス音声トラックを取得 (これは destination.stream から動的に取得される)
+        const updatedMixedAudioTrack =
+          this.audioMixingResources.destination.stream.getAudioTracks()[0]
+
+        if (updatedMixedAudioTrack) {
+          // d. 各画面共有接続の音声トラックを新しいミックス音声トラックに置き換える
+          console.log(
+            `[PeerManager instance ${this.peer?.id}] Replacing audio track for active screen share connections.`
+          )
+          for (const peerId in this.screenMediaConnections) {
+            const conn = this.screenMediaConnections[peerId]
+            const peerConnection = conn.peerConnection as
+              | RTCPeerConnection
+              | undefined
+            if (peerConnection) {
+              const sender = peerConnection
+                .getSenders()
+                .find((s) => s.track?.kind === 'audio')
+              if (sender) {
+                try {
+                  await sender.replaceTrack(updatedMixedAudioTrack)
+                  console.log(
+                    `[PeerManager instance ${this.peer?.id}] Successfully replaced audio track for screen share with ${peerId}.`
+                  )
+                } catch (err) {
+                  console.error(
+                    `[PeerManager instance ${this.peer?.id}] Failed to replace audio track for screen share with ${peerId}:`,
+                    err
+                  )
+                }
+              } else {
+                console.warn(
+                  `[PeerManager instance ${this.peer?.id}] No audio sender found for screen share connection with ${peerId}.`
+                )
+              }
+            }
+          }
+        } else {
+          console.warn(
+            `[PeerManager instance ${this.peer?.id}] Could not get updated mixed audio track for screen share.`
+          )
+        }
+      }
+
       console.log(
         `[PeerManager instance ${this.peer?.id}] Microphone switched successfully.`
       )
