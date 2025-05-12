@@ -914,11 +914,19 @@ export class PeerManager {
         // ユーザーによるキャンセル (NotAllowedError) かどうかを判定
         if (err instanceof Error && err.name === 'NotAllowedError') {
           console.log('[PeerManager] Screen share cancelled by user.')
-          // キャンセルされた場合は、共有状態にせず、静かに終了する
-          // isCurrentlyScreenSharing は false のまま
           this.cleanupScreenShareResources() // 念のためリソース解放
-          // エラーを再スローしない、または特定の目印をつけて再スロー
-          // throw new Error('Screen share cancelled'); // 例: キャンセルを示すエラー
+          //  サーバーに画面共有が開始されなかった(キャンセルされた)ことを通知
+          if (this.socket && this.socket.connected) {
+            console.log(
+              '[PeerManager] Notifying server of screen share cancellation (emit notify-stop-share).'
+            )
+            this.socket.emit('notify-stop-share') // サーバー側の共有状態をリセットさせる
+          } else {
+            console.warn(
+              '[PeerManager] Socket not available or not connected, cannot notify server of cancellation.'
+            )
+          }
+          // isCurrentlyScreenSharing はこの時点では false のままのはず
           return
         } else {
           // その他のエラー (デバイスが見つからないなど)
@@ -1060,7 +1068,6 @@ export class PeerManager {
       )
     } catch (error) {
       console.error('[PeerManager] Error starting screen share:', error)
-      this.isCurrentlyScreenSharing = false
       this.cleanupScreenShareResources()
       throw error
     }
