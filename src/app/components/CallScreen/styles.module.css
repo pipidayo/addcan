@@ -28,7 +28,7 @@
   order: 2;
   flex: 1;
   height: 100%;
-  background: linear-gradient(/* ... */);
+  background-color: #111;
   position: relative; /* ローディング表示などの基準に */
   overflow: hidden;
   display: flex;
