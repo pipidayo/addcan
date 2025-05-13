@@ -854,10 +854,11 @@ export class PeerManager {
         console.log(
           '[PeerManager switchMicrophone] Re-creating audio mixing resources for screen share.'
         )
-        this.cleanupAudioMixingResources() // 既存のミキシングリソースを解放
+        // ★★★ デバッグのためミキシング処理とリソースクリーンアップを一時的に無効化 ★★★
+        // this.cleanupAudioMixingResources();
 
         let newMixedAudioTrackForScreenShare: MediaStreamTrack | null = null
-
+        /* ★★★ デバッグのためミキシング処理をコメントアウト ★★★
         try {
           const newAudioContext = new AudioContext()
           const newDestination = newAudioContext.createMediaStreamDestination()
@@ -948,13 +949,28 @@ export class PeerManager {
             // なければ、ミキシングなしとして扱う
             // screenMediaConnections には newMixedAudioTrackForScreenShare (newAudioTrack) が使われる
           }
+        } */
+        // ★★★ デバッグのため、新しいマイクのトラック（のクローン）を直接使用 ★★★
+
+        try {
+          newMixedAudioTrackForScreenShare = newAudioTrack.clone()
+          console.log(
+            `[PeerManager switchMicrophone DEBUG] Using cloned newAudioTrack directly for screen share. ID=${newMixedAudioTrackForScreenShare.id}`
+          )
+          // this.audioMixingResources はミキシング無効化中は null のはずなので、mixedAudioTrack の更新は不要
+        } catch (e) {
+          console.error(
+            '[PeerManager switchMicrophone DEBUG] Failed to clone newAudioTrack for screen share, using original',
+            e
+          )
+          newMixedAudioTrackForScreenShare = newAudioTrack
         }
 
         if (
           newMixedAudioTrackForScreenShare &&
           newMixedAudioTrackForScreenShare.readyState === 'live'
         ) {
-          this.audioMixingResources.mixedAudioTrack =
+          this.audioMixingResources.mixedAudioTrack = // This line might cause an error if audioMixingResources is null
             newMixedAudioTrackForScreenShare
 
           console.log(
@@ -1019,18 +1035,6 @@ export class PeerManager {
         }
       }
 
-      // ★★★ 5. 古いローカルオーディオトラックをメソッドの最後に停止 ★★★
-      if (
-        oldLocalAudioTrack &&
-        oldLocalAudioTrack.id !== newAudioTrack.id && // newAudioTrack はオリジナルのまま比較
-        oldLocalAudioTrack.readyState === 'live'
-      ) {
-        console.log(
-          `[PeerManager switchMicrophone] (Finally) Stopping old local audio track: ID=${oldLocalAudioTrack.id}, State=${oldLocalAudioTrack.readyState}`
-        )
-        oldLocalAudioTrack.stop()
-      }
-
       // ★ newAudioTrack のクローンを localStream に使用する
       let trackForLocalStream = newAudioTrack
       try {
@@ -1044,7 +1048,6 @@ export class PeerManager {
           cloneError
         )
       }
-
       // ★ this.localStream を再構築する直前の newAudioTrack の状態をログに出力
       console.log(
         `[PeerManager switchMicrophone] Before reconstructing localStream. trackForLocalStream ID: ${trackForLocalStream.id}, State: ${trackForLocalStream.readyState}, Enabled: ${trackForLocalStream.enabled}`
@@ -1077,6 +1080,18 @@ export class PeerManager {
       console.log(
         `[PeerManager switchMicrophone] Microphone switched successfully to device ID: ${newDeviceId}. Final localStream audio track ID: ${trackForLocalStream.id}`
       )
+
+      // ★★★ 5. 古いローカルオーディオトラックをメソッドの最後に停止 ★★★
+      if (
+        oldLocalAudioTrack &&
+        oldLocalAudioTrack.id !== newAudioTrack.id && // newAudioTrack はオリジナルのまま比較
+        oldLocalAudioTrack.readyState === 'live'
+      ) {
+        console.log(
+          `[PeerManager switchMicrophone] (Finally) Stopping old local audio track: ID=${oldLocalAudioTrack.id}, State=${oldLocalAudioTrack.readyState}`
+        )
+        oldLocalAudioTrack.stop()
+      }
     } catch (error) {
       console.error(
         `[PeerManager switchMicrophone] Failed to switch microphone:`,
@@ -1254,70 +1269,86 @@ export class PeerManager {
 
       // --- 3. Web Audio API で音声をミックス ---
       console.log('[PeerManager] Setting up Web Audio API for mixing...')
-      try {
-        const audioContext = new AudioContext()
-        const destination = audioContext.createMediaStreamDestination() // 出力先ノード
 
-        let micSource: MediaStreamAudioSourceNode | null = null
-        if (micAudioTrack && this.localStream) {
-          // マイク音声があれば接続
-          micSource = audioContext.createMediaStreamSource(
-            new MediaStream([micAudioTrack])
-          )
-          micSource.connect(destination)
-          console.log('[PeerManager] Connected mic audio to mixer.')
-        }
-
-        let screenSource: MediaStreamAudioSourceNode | null = null
-        if (screenAudioTrack && this.screenStream) {
-          // 画面共有音声があれば接続
-          // 注意: screenStream をそのまま使うと映像も含まれてしまうため、音声トラックのみのストリームを作成
-          screenSource = audioContext.createMediaStreamSource(
-            new MediaStream([screenAudioTrack])
-          )
-          screenSource.connect(destination)
-          console.log('[PeerManager] Connected screen audio to mixer.')
-        }
-
-        // ミックスされた音声トラックを取得
-        if (destination.stream.getAudioTracks().length > 0) {
-          mixedAudioTrack = destination.stream.getAudioTracks()[0]
+      // ★★★ デバッグのためミキシング処理とリソースクリーンアップを一時的に無効化 ★★★
+      if (micAudioTrack) {
+        try {
+          mixedAudioTrack = micAudioTrack.clone()
           console.log(
-            '[PeerManager] Successfully mixed audio tracks:',
-            mixedAudioTrack.id
+            `[PeerManager startScreenShare DEBUG] Using cloned micAudioTrack directly. ID=${mixedAudioTrack.id}`
           )
-
-          // 作成したリソースを保存 (クリーンアップ用)
-          this.audioMixingResources = {
-            audioContext,
-            micSource,
-            screenSource,
-            destination,
-            mixedAudioTrack: mixedAudioTrack,
-          }
-        } else if (micAudioTrack) {
-          // ミックス先からトラックが取得できなかったがマイクはある場合、マイク音声をそのまま使う（フォールバック）
-          console.warn(
-            '[PeerManager] Could not get mixed audio track, falling back to mic audio.'
+        } catch (e) {
+          console.error(
+            '[PeerManager startScreenShare DEBUG] Failed to clone micAudioTrack, using original',
+            e
           )
           mixedAudioTrack = micAudioTrack
-          // この場合、ミキシングリソースは不要なので null のまま
-          this.cleanupAudioMixingResources() // 作成途中のリソースがあれば解放
-        } else {
-          // 音声ソースが何もない場合
-          console.warn('[PeerManager] No audio sources available to send.')
-          mixedAudioTrack = null // 送信する音声なし
-          this.cleanupAudioMixingResources()
         }
-      } catch (mixError) {
-        console.error('[PeerManager] Error during Web Audio mixing:', mixError)
-        // ミキシングに失敗した場合、マイク音声があればそれを使い、なければ音声なしで続行
-        mixedAudioTrack = micAudioTrack ?? null
+        // this.audioMixingResources はミキシング無効化中は null のまま
+        // this.cleanupAudioMixingResources(); // ミキシングしないので不要
+      } else {
         console.warn(
-          `[PeerManager] Falling back to ${mixedAudioTrack ? 'mic audio' : 'no audio'} due to mixing error.`
+          '[PeerManager startScreenShare DEBUG] No mic audio track available for screen share.'
         )
-        this.cleanupAudioMixingResources() // 作成途中のリソースがあれば解放
+        mixedAudioTrack = null
+        // this.cleanupAudioMixingResources(); // ミキシングしないので不要
       }
+      // try {
+      //   const audioContext = new AudioContext()
+      //   const destination = audioContext.createMediaStreamDestination() // 出力先ノード
+
+      //   let micSource: MediaStreamAudioSourceNode | null = null
+      //   if (micAudioTrack && this.localStream) {
+      //     // マイク音声があれば接続
+      //     micSource = audioContext.createMediaStreamSource(
+      //       new MediaStream([micAudioTrack])
+      //     )
+      //     micSource.connect(destination)
+      //     console.log('[PeerManager] Connected mic audio to mixer.')
+      //   }
+
+      //   let screenSource: MediaStreamAudioSourceNode | null = null
+      //   if (screenAudioTrack && this.screenStream) {
+      //     // 画面共有音声があれば接続
+      //     screenSource = audioContext.createMediaStreamSource(
+      //       new MediaStream([screenAudioTrack])
+      //     )
+      //     screenSource.connect(destination)
+      //     console.log('[PeerManager] Connected screen audio to mixer.')
+      //   }
+
+      //   if (destination.stream.getAudioTracks().length > 0) {
+      //     mixedAudioTrack = destination.stream.getAudioTracks()[0]
+      //     console.log(
+      //       '[PeerManager] Successfully mixed audio tracks:',
+      //       mixedAudioTrack.id
+      //     )
+      //     this.audioMixingResources = {
+      //       audioContext,
+      //       micSource,
+      //       screenSource,
+      //       destination,
+      //       mixedAudioTrack: mixedAudioTrack,
+      //     }
+      //   } else if (micAudioTrack) {
+      //     console.warn(
+      //       '[PeerManager] Could not get mixed audio track, falling back to mic audio.'
+      //     )
+      //     mixedAudioTrack = micAudioTrack
+      //     this.cleanupAudioMixingResources()
+      //   } else {
+      //     console.warn('[PeerManager] No audio sources available to send.')
+      //     mixedAudioTrack = null
+      //     this.cleanupAudioMixingResources()
+      //   }
+      // } catch (mixError) {
+      //   console.error('[PeerManager] Error during Web Audio mixing:', mixError)
+      //   mixedAudioTrack = micAudioTrack ?? null
+      //   console.warn(
+      //     `[PeerManager] Falling back to ${mixedAudioTrack ? 'mic audio' : 'no audio'} due to mixing error.`
+      //   )
+      //   this.cleanupAudioMixingResources()
+      // }
 
       //  共有状態フラグを立てる
       this.isCurrentlyScreenSharing = true
