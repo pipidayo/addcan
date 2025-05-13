@@ -1290,6 +1290,22 @@ export class PeerManager {
       )
     }
 
+    // ★★★ 通常の音声通話接続のトラックを再確認/再設定 ★★★
+    //    画面共有中にマイクが変更された場合に備えて、現在の localStream の音声トラックを
+    //    通常の音声通話接続に再度適用する。
+    const currentMicTrack = this.localStream?.getAudioTracks()[0]
+    if (currentMicTrack && currentMicTrack.readyState === 'live') {
+      console.log(
+        `[PeerManager stopScreenShare] Re-applying current mic track (ID: ${currentMicTrack.id}, State: ${currentMicTrack.readyState}) to mediaConnections.`
+      )
+      // replaceTrackForAllConnections は mediaConnections のみを対象とする
+      await this.replaceTrackForAllConnections(currentMicTrack, 'audio')
+    } else {
+      console.warn(
+        `[PeerManager stopScreenShare] Current mic track is not available or not live after stopping screen share. ID: ${currentMicTrack?.id}, State: ${currentMicTrack?.readyState}. Voice might not be sent on mediaConnections.`
+      )
+    }
+
     console.log(
       `[PeerManager instance ${this.peer?.id}] Screen sharing stopped.`
     )
