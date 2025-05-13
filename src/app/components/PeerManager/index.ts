@@ -824,6 +824,12 @@ export class PeerManager {
         `[PeerManager switchMicrophone] Successfully obtained new audio track: ID=${newAudioTrack.id}, State=${newAudioTrack.readyState}`
       )
 
+      // ★新しい音声トラックの有効状態を早期に設定
+      newAudioTrack.enabled = !this.isMuted
+      console.log(
+        `[PeerManager switchMicrophone] Set newAudioTrack.enabled to ${newAudioTrack.enabled} (isMuted: ${this.isMuted})`
+      )
+
       // ★ 3. 通常の音声通話接続のトラックを更新
       console.log(
         `[PeerManager switchMicrophone] Calling replaceTrackForAllConnections with new audio track ID: ${newAudioTrack.id}`
@@ -957,6 +963,11 @@ export class PeerManager {
         oldLocalAudioTrack.stop()
       }
 
+      // ★ this.localStream を再構築する直前の newAudioTrack の状態をログに出力
+      console.log(
+        `[PeerManager switchMicrophone] Before reconstructing localStream. newAudioTrack ID: ${newAudioTrack.id}, State: ${newAudioTrack.readyState}, Enabled: ${newAudioTrack.enabled}`
+      )
+
       // 6. this.localStream を新しいオーディオトラックで再構築
       // (ダミービデオトラックは維持する)
       const dummyVideoTrack = this.localStream?.getVideoTracks()[0]
@@ -979,7 +990,7 @@ export class PeerManager {
       }
       this.localStream = new MediaStream(newLocalStreamTracks)
       this.options?.onLocalStream(this.localStream) // 新しいlocalStreamをUIに通知
-      newAudioTrack.enabled = !this.isMuted // ミュート状態を適用
+      // newAudioTrack.enabled = !this.isMuted; // ★ 有効化処理を早期に移動したため、ここでは不要
 
       console.log(
         `[PeerManager switchMicrophone] Microphone switched successfully to device ID: ${newDeviceId}. Final localStream audio track ID: ${this.localStream?.getAudioTracks()[0]?.id}`
