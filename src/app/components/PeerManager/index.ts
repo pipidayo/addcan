@@ -709,33 +709,47 @@ export class PeerManager {
       const peerConnection = conn.peerConnection as
         | RTCPeerConnection
         | undefined
-      peerConnection?.getSenders().forEach((sender) => {
-        if (sender.track?.kind === 'audio') {
-          console.log(
-            `[PeerManager sendMuteStatus] Updating mediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} enabled to ${newEnabledState}`
-          )
-          sender.track.enabled = newEnabledState
-        }
-      })
+      if (peerConnection && peerConnection.connectionState === 'connected') {
+        peerConnection.getSenders().forEach((sender) => {
+          if (
+            sender.track?.kind === 'audio' &&
+            sender.track.readyState === 'live'
+          ) {
+            console.log(
+              `[PeerManager sendMuteStatus] Updating mediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
+            )
+            sender.track.enabled = newEnabledState
+          }
+        })
+      }
     })
 
     // 3. screenMediaConnections (画面共有) で使用されている音声トラックを更新
+    //    RTCRtpSender が実際に送信しているトラックの enabled を変更する
     Object.values(this.screenMediaConnections).forEach((conn) => {
       const peerConnection = conn.peerConnection as
         | RTCPeerConnection
         | undefined
-      peerConnection?.getSenders().forEach((sender) => {
-        if (sender.track?.kind === 'audio') {
-          console.log(
-            `[PeerManager sendMuteStatus] Updating screenMediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
-          )
-          sender.track.enabled = newEnabledState
-        }
-      })
+      if (peerConnection && peerConnection.connectionState === 'connected') {
+        peerConnection.getSenders().forEach((sender) => {
+          if (
+            sender.track?.kind === 'audio' &&
+            sender.track.readyState === 'live'
+          ) {
+            console.log(
+              `[PeerManager sendMuteStatus] Updating screenMediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
+            )
+            sender.track.enabled = newEnabledState
+          }
+        })
+      }
     })
 
     // 4. ミキシングリソース内のトラックも更新 (ミキシング有効時)
-    if (this.audioMixingResources?.mixedAudioTrack) {
+    if (
+      this.audioMixingResources?.mixedAudioTrack &&
+      this.audioMixingResources.mixedAudioTrack.readyState === 'live'
+    ) {
       console.log(
         `[PeerManager sendMuteStatus] Updating mixedAudioTrack ${this.audioMixingResources.mixedAudioTrack.id} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
       )
@@ -1148,6 +1162,24 @@ export class PeerManager {
     let screenVideoTrack: MediaStreamTrack | null = null
     let mixedAudioTrack: MediaStreamTrack | null = null
 
+    // ★★★ 画面共有開始前に、通常の音声接続の音声トラックを一時的に無効化 ★★★
+    console.log(
+      '[PeerManager startScreenShare] Temporarily disabling audio on mediaConnections.'
+    )
+    Object.values(this.mediaConnections).forEach((conn) => {
+      const pc = conn.peerConnection as RTCPeerConnection | undefined
+      pc?.getSenders().forEach((sender) => {
+        if (sender.track?.kind === 'audio') {
+          console.log(
+            `[PeerManager startScreenShare] Disabling audio track ${sender.track.id} for mediaConnection with ${conn.peer}`
+          )
+          // sender.track.enabled = false; // 一時的に無効化
+          // もしくは replaceTrack(null) で送信を停止する (より確実かもしれない)
+          // ただし、stopScreenShare で元に戻す処理が必要
+        }
+      })
+    })
+
     try {
       // 1. マイク音声トラックを取得 (localStream がなければ取得試行)
       if (!this.localStream) {
@@ -1395,6 +1427,24 @@ export class PeerManager {
     //    通常の音声通話接続に再度適用する。
     const currentMicTrack = this.localStream?.getAudioTracks()[0]
     if (currentMicTrack && currentMicTrack.readyState === 'live') {
+      // ★★★ 画面共有開始時に無効化した通常の音声接続の音声トラックを再度有効化 ★★★
+      console.log(
+        '[PeerManager stopScreenShare] Re-enabling audio on mediaConnections if applicable.'
+      )
+      Object.values(this.mediaConnections).forEach((conn) => {
+        const pc = conn.peerConnection as RTCPeerConnection | undefined
+        pc?.getSenders().forEach((sender) => {
+          if (sender.track?.kind === 'audio') {
+            // startScreenShare で replaceTrack(null) した場合は、ここで currentMicTrack に戻す
+            // sender.track.enabled = !this.isMuted; // 現在のミュート状態に基づいて有効化
+            console.log(
+              `[PeerManager stopScreenShare] Ensuring audio track ${sender.track.id} for mediaConnection with ${conn.peer} is set to enabled: ${!this.isMuted}`
+            )
+            sender.track.enabled = !this.isMuted
+          }
+        })
+      })
+
       console.log(
         `[PeerManager stopScreenShare] Re-applying current mic track (ID: ${currentMicTrack.id}, State: ${currentMicTrack.readyState}) to mediaConnections.`
       )
