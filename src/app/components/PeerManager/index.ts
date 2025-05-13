@@ -698,12 +698,13 @@ export class PeerManager {
     // 1. localStream の音声トラックを更新
     this.localStream?.getAudioTracks().forEach((track) => {
       console.log(
-        `[PeerManager sendMuteStatus] Updating localStream audio track ${track.id} enabled to ${newEnabledState}`
+        `[PeerManager sendMuteStatus] Updating localStream audio track ${track.id} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
       )
       track.enabled = newEnabledState
     })
 
     // 2. mediaConnections (通常の音声通話) で使用されている音声トラックを更新
+    //    RTCRtpSender が実際に送信しているトラックの enabled を変更する
     Object.values(this.mediaConnections).forEach((conn) => {
       const peerConnection = conn.peerConnection as
         | RTCPeerConnection
@@ -726,7 +727,7 @@ export class PeerManager {
       peerConnection?.getSenders().forEach((sender) => {
         if (sender.track?.kind === 'audio') {
           console.log(
-            `[PeerManager sendMuteStatus] Updating screenMediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} enabled to ${newEnabledState}`
+            `[PeerManager sendMuteStatus] Updating screenMediaConnection sender audio track ${sender.track.id} for peer ${conn.peer} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
           )
           sender.track.enabled = newEnabledState
         }
@@ -736,14 +737,14 @@ export class PeerManager {
     // 4. ミキシングリソース内のトラックも更新 (ミキシング有効時)
     if (this.audioMixingResources?.mixedAudioTrack) {
       console.log(
-        `[PeerManager sendMuteStatus] Updating mixedAudioTrack ${this.audioMixingResources.mixedAudioTrack.id} enabled to ${newEnabledState}`
+        `[PeerManager sendMuteStatus] Updating mixedAudioTrack ${this.audioMixingResources.mixedAudioTrack.id} (isMuted: ${this.isMuted}) enabled to ${newEnabledState}`
       )
       this.audioMixingResources.mixedAudioTrack.enabled = newEnabledState
     }
     this.sendMessage('MUTE_STATUS', this.isMuted)
   }
 
-  // ★★★ replaceTrackForAllConnections は音声トラック専用にする (または削除しても良い) ★★★
+  //  replaceTrackForAllConnections は音声トラック専用にする (または削除しても良い)
   // このメソッドは switchMicrophone でのみ使われる
   private async replaceTrackForAllConnections(
     newTrack: MediaStreamTrack | null,
@@ -871,18 +872,18 @@ export class PeerManager {
         `[PeerManager switchMicrophone] Successfully obtained new audio track: ID=${newAudioTrack.id}, State=${newAudioTrack.readyState}`
       )
 
-      // ★新しい音声トラックの有効状態を早期に設定
-      newAudioTrack.enabled = !this.isMuted
-      console.log(
-        `[PeerManager switchMicrophone] Set newAudioTrack.enabled to ${newAudioTrack.enabled} (isMuted: ${this.isMuted})`
-      )
-
       // ★ 3. 通常の音声通話接続のトラックを更新
       console.log(
         `[PeerManager switchMicrophone] Calling replaceTrackForAllConnections with new audio track ID: ${newAudioTrack.id}`
       )
 
       await this.replaceTrackForAllConnections(newAudioTrack, 'audio')
+
+      // ★ replaceTrack後、新しいトラックのenabled状態を現在のミュート状態に合わせる
+      newAudioTrack.enabled = !this.isMuted
+      console.log(
+        `[PeerManager switchMicrophone] Set newAudioTrack ${newAudioTrack.id} (used in mediaConnections) enabled to ${newAudioTrack.enabled} (isMuted: ${this.isMuted})`
+      )
 
       // ★ 4. 画面共有中の場合、画面共有接続の送信トラックも更新
       if (
@@ -913,13 +914,6 @@ export class PeerManager {
           )
           trackForScreenShare = newAudioTrack
         }
-        if (trackForScreenShare) {
-          console.log(
-            `[PeerManager switchMicrophone DEBUG] Setting trackForScreenShare ${trackForScreenShare.id} enabled to ${!this.isMuted}`
-          )
-
-          trackForScreenShare.enabled = !this.isMuted // ミュート状態を適用
-        }
 
         if (trackForScreenShare && trackForScreenShare.readyState === 'live') {
           console.log(
@@ -927,9 +921,7 @@ export class PeerManager {
           )
 
           // d. 各画面共有接続の音声トラックを新しいミックス音声トラックに置き換える
-          console.log(
-            `[PeerManager switchMicrophone] Replacing audio track for active screen share connections with new track (ID: ${trackForScreenShare.id}, State: ${trackForScreenShare.readyState}).`
-          )
+
           for (const peerId in this.screenMediaConnections) {
             const conn = this.screenMediaConnections[peerId]
             const peerConnection = conn.peerConnection as
@@ -946,9 +938,13 @@ export class PeerManager {
                     trackToReplaceWith &&
                     trackToReplaceWith.readyState === 'live'
                   ) {
-                    // enabled も確認すべきか
                     console.log(
                       `[PeerManager switchMicrophone] Replacing track for screenMediaConnection to ${peerId} with track ID ${trackToReplaceWith.id}, State: ${trackToReplaceWith.readyState}, Enabled: ${trackToReplaceWith.enabled}`
+                    )
+                    // ★ replaceTrack前に、置き換えるトラックのenabledを現在のミュート状態に合わせる
+                    trackToReplaceWith.enabled = !this.isMuted
+                    console.log(
+                      `[PeerManager switchMicrophone DEBUG] Setting trackToReplaceWith ${trackToReplaceWith.id} for screen share with ${peerId} enabled to ${trackToReplaceWith.enabled}`
                     )
                     await sender.replaceTrack(trackToReplaceWith)
                   } else {
@@ -1023,6 +1019,13 @@ export class PeerManager {
         }
       }
       this.localStream = new MediaStream(newLocalStreamTracks)
+      // ★ 新しい localStream の音声トラックの enabled も現在のミュート状態に合わせる
+      this.localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !this.isMuted
+        console.log(
+          `[PeerManager switchMicrophone] Set new localStream audio track ${track.id} enabled to ${track.enabled}`
+        )
+      })
       this.options?.onLocalStream(this.localStream) // 新しいlocalStreamをUIに通知
       // newAudioTrack.enabled = !this.isMuted; // ★ 有効化処理を早期に移動したため、ここでは不要
 
