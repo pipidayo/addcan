@@ -881,6 +881,12 @@ export class PeerManager {
           )
         }
 
+        // ★ ミキサーに接続するトラックが有効であることを確認
+        micTrackForMixer.enabled = !this.isMuted
+        console.log(
+          `[PeerManager switchMicrophone] Ensuring micTrackForMixer (ID: ${micTrackForMixer.id}) is enabled: ${micTrackForMixer.enabled} before connecting to mixer.`
+        )
+
         const newMicStreamForMixing = new MediaStream([micTrackForMixer])
         const newMicSourceNode = audioContext.createMediaStreamSource(
           newMicStreamForMixing
@@ -897,13 +903,16 @@ export class PeerManager {
 
         if (
           newMixedAudioTrackForScreenShare &&
-          newMixedAudioTrackForScreenShare.readyState === 'live'
+          newMixedAudioTrackForScreenShare.readyState === 'live' // enabled状態も確認した方が良いかもしれない
         ) {
           this.audioMixingResources.mixedAudioTrack =
             newMixedAudioTrackForScreenShare
 
           console.log(
             `[PeerManager switchMicrophone] Updated this.audioMixingResources.mixedAudioTrack to ID: ${newMixedAudioTrackForScreenShare.id}, State: ${newMixedAudioTrackForScreenShare.readyState}`
+          )
+          console.log(
+            `[PeerManager switchMicrophone] newMixedAudioTrackForScreenShare.enabled: ${newMixedAudioTrackForScreenShare.enabled}`
           )
 
           // d. 各画面共有接続の音声トラックを新しいミックス音声トラックに置き換える
@@ -921,12 +930,22 @@ export class PeerManager {
                 .find((s) => s.track?.kind === 'audio')
               if (sender) {
                 try {
-                  console.log(
-                    `[PeerManager switchMicrophone] Replacing track for screenMediaConnection to ${peerId} with track ID ${this.audioMixingResources.mixedAudioTrack.id}, State: ${this.audioMixingResources.mixedAudioTrack.readyState}`
-                  )
-                  await sender.replaceTrack(
+                  const trackToReplaceWith =
                     this.audioMixingResources.mixedAudioTrack
-                  )
+                  if (
+                    trackToReplaceWith &&
+                    trackToReplaceWith.readyState === 'live'
+                  ) {
+                    // enabled も確認すべきか
+                    console.log(
+                      `[PeerManager switchMicrophone] Replacing track for screenMediaConnection to ${peerId} with track ID ${trackToReplaceWith.id}, State: ${trackToReplaceWith.readyState}, Enabled: ${trackToReplaceWith.enabled}`
+                    )
+                    await sender.replaceTrack(trackToReplaceWith)
+                  } else {
+                    console.warn(
+                      `[PeerManager switchMicrophone] Track for screenMediaConnection to ${peerId} is null, not live, or not enabled. Skipping replaceTrack. Track ID: ${trackToReplaceWith?.id}, State: ${trackToReplaceWith?.readyState}, Enabled: ${trackToReplaceWith?.enabled}`
+                    )
+                  }
 
                   console.log(
                     `[PeerManager switchMicrophone] Successfully replaced audio track for screen share with ${peerId}. New sender track ID: ${sender.track?.id}, State: ${sender.track?.readyState}`
