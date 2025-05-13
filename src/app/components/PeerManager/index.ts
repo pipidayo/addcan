@@ -1019,14 +1019,14 @@ export class PeerManager {
         }
       }
 
-      // 5. 古いローカルオーディオトラックを停止 (すべての置き換え処理の後)
+      // ★★★ 5. 古いローカルオーディオトラックをメソッドの最後に停止 ★★★
       if (
         oldLocalAudioTrack &&
-        oldLocalAudioTrack.id !== newAudioTrack.id &&
+        oldLocalAudioTrack.id !== newAudioTrack.id && // newAudioTrack はオリジナルのまま比較
         oldLocalAudioTrack.readyState === 'live'
       ) {
         console.log(
-          `[PeerManager switchMicrophone] Stopping old local audio track: ID=${oldLocalAudioTrack.id}, State=${oldLocalAudioTrack.readyState}`
+          `[PeerManager switchMicrophone] (Finally) Stopping old local audio track: ID=${oldLocalAudioTrack.id}, State=${oldLocalAudioTrack.readyState}`
         )
         oldLocalAudioTrack.stop()
       }
