@@ -897,13 +897,24 @@ export class PeerManager {
           `[PeerManager switchMicrophone] Connected new micSource (from track ID: ${micTrackForMixer.id}, State: ${micTrackForMixer.readyState}) to mixer destination.`
         )
 
-        // c. 新しいミックス音声トラックを取得
+        // ★★★ c. ミキサーの出力から新しいミックス音声トラックを再取得 ★★★
+        // destination.stream は常に最新のミックスされたストリームを反映するはず
+        // 古いミックス音声トラックを停止する必要があるかもしれない
+        if (
+          this.audioMixingResources.mixedAudioTrack &&
+          this.audioMixingResources.mixedAudioTrack.readyState === 'live'
+        ) {
+          console.log(
+            `[PeerManager switchMicrophone] Stopping previous mixed audio track: ID=${this.audioMixingResources.mixedAudioTrack.id}`
+          )
+          this.audioMixingResources.mixedAudioTrack.stop()
+        }
         newMixedAudioTrackForScreenShare =
           this.audioMixingResources.destination.stream.getAudioTracks()[0]
 
         if (
           newMixedAudioTrackForScreenShare &&
-          newMixedAudioTrackForScreenShare.readyState === 'live' // enabled状態も確認した方が良いかもしれない
+          newMixedAudioTrackForScreenShare.readyState === 'live'
         ) {
           this.audioMixingResources.mixedAudioTrack =
             newMixedAudioTrackForScreenShare
