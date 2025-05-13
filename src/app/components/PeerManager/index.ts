@@ -1031,15 +1031,29 @@ export class PeerManager {
         oldLocalAudioTrack.stop()
       }
 
+      // ★ newAudioTrack のクローンを localStream に使用する
+      let trackForLocalStream = newAudioTrack
+      try {
+        trackForLocalStream = newAudioTrack.clone()
+        console.log(
+          `[PeerManager switchMicrophone] Cloned newAudioTrack for localStream: Original ID=${newAudioTrack.id}, Clone ID=${trackForLocalStream.id}`
+        )
+      } catch (cloneError) {
+        console.warn(
+          `[PeerManager switchMicrophone] Failed to clone newAudioTrack for localStream, using original. Error:`,
+          cloneError
+        )
+      }
+
       // ★ this.localStream を再構築する直前の newAudioTrack の状態をログに出力
       console.log(
-        `[PeerManager switchMicrophone] Before reconstructing localStream. newAudioTrack ID: ${newAudioTrack.id}, State: ${newAudioTrack.readyState}, Enabled: ${newAudioTrack.enabled}`
+        `[PeerManager switchMicrophone] Before reconstructing localStream. trackForLocalStream ID: ${trackForLocalStream.id}, State: ${trackForLocalStream.readyState}, Enabled: ${trackForLocalStream.enabled}`
       )
 
       // 6. this.localStream を新しいオーディオトラックで再構築
       // (ダミービデオトラックは維持する)
       const dummyVideoTrack = this.localStream?.getVideoTracks()[0]
-      const newLocalStreamTracks: MediaStreamTrack[] = [newAudioTrack]
+      const newLocalStreamTracks: MediaStreamTrack[] = [trackForLocalStream]
       if (dummyVideoTrack && dummyVideoTrack.readyState === 'live') {
         newLocalStreamTracks.push(dummyVideoTrack)
       } else {
@@ -1061,7 +1075,7 @@ export class PeerManager {
       // newAudioTrack.enabled = !this.isMuted; // ★ 有効化処理を早期に移動したため、ここでは不要
 
       console.log(
-        `[PeerManager switchMicrophone] Microphone switched successfully to device ID: ${newDeviceId}. Final localStream audio track ID: ${this.localStream?.getAudioTracks()[0]?.id}`
+        `[PeerManager switchMicrophone] Microphone switched successfully to device ID: ${newDeviceId}. Final localStream audio track ID: ${trackForLocalStream.id}`
       )
     } catch (error) {
       console.error(
