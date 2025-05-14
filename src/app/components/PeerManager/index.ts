@@ -1173,9 +1173,8 @@ export class PeerManager {
           console.log(
             `[PeerManager startScreenShare] Disabling audio track ${sender.track.id} for mediaConnection with ${conn.peer}`
           )
-          // sender.track.enabled = false; // 一時的に無効化
-          // もしくは replaceTrack(null) で送信を停止する (より確実かもしれない)
-          // ただし、stopScreenShare で元に戻す処理が必要
+
+          sender.track.enabled = false // ★★★ 確実に無効化 ★★★
         }
       })
     })
@@ -1435,8 +1434,9 @@ export class PeerManager {
         const pc = conn.peerConnection as RTCPeerConnection | undefined
         pc?.getSenders().forEach((sender) => {
           if (sender.track?.kind === 'audio') {
-            // startScreenShare で replaceTrack(null) した場合は、ここで currentMicTrack に戻す
-            // sender.track.enabled = !this.isMuted; // 現在のミュート状態に基づいて有効化
+            // 画面共有開始時に mediaConnections のトラックを enabled = false にしたので、
+            // ここでは現在のミュート状態に基づいて enabled を再設定する。
+            // replaceTrack を行う前に、送信されていたトラックの enabled を正しく戻す。
             console.log(
               `[PeerManager stopScreenShare] Ensuring audio track ${sender.track.id} for mediaConnection with ${conn.peer} is set to enabled: ${!this.isMuted}`
             )
