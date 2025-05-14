@@ -716,8 +716,9 @@ export class PeerManager {
     this.isMuted = muted
     const trackToSend = this.isMuted
       ? this.silentAudioTrack ||
-        (this.silentAudioTrack = this.createSilentAudioTrack()) // ミュート時は無音ダミートラック
-      : this.localStream?.getAudioTracks()[0] // ミュート解除時は localStream の音声トラック
+        (this.silentAudioTrack = this.createSilentAudioTrack()) // ミュート時は無音トラック
+      : this.originalMicTrack // ★★★ ミュート解除時はオリジナルのマイク音声トラックを使用 ★★★
+    //  : this.localStream?.getAudioTracks()[0] // 以前のロジック
 
     if (!trackToSend) {
       console.warn(
@@ -742,12 +743,17 @@ export class PeerManager {
           `[PeerManager sendMuteStatus] Replacing localStream audio track ${currentLocalAudioTrack.id} with ${trackToSend.id}`
         )
         // localStream から古いトラックを削除し、新しいトラックを追加して再構築
+        // this.localStream.removeTrack(currentLocalAudioTrack); // localStream はUI用なので、必ずしも送信トラックと一致させる必要はないかもしれない
+        // this.localStream.addTrack(trackToSend);
+        // UI表示用のlocalStreamは、実際の音声トラック(originalMicTrack)か、ミュート状態を示すためにenabledがfalseになったトラックのままにするか検討
+        // ここでは、送信トラックの変更に追従せず、localStreamのトラックは別途管理する方針も考えられる。
+        // 今回は、送信トラックとlocalStreamのトラックを一致させる方針で進めるが、UIのインジケーター問題と関連する可能性あり。
+        // もしUIインジケーターが localStream の enabled を見ているなら、
+        // ミュート解除時に localStream のトラックも originalMicTrack に戻し、enabled = true にする必要がある。
         this.localStream.removeTrack(currentLocalAudioTrack)
-        this.localStream.addTrack(trackToSend) // trackToSend はクローンではない可能性があるので注意
-        // onLocalStream コールバックを呼んで UI に通知
-        this.options?.onLocalStream(this.localStream)
-        // 古い localStream トラックを停止 (新しいトラックがクローンでない場合は停止しない)
-        // if (currentLocalAudioTrack !== this.originalMicTrack && currentLocalAudioTrack !== this.silentAudioTrack) {
+        this.localStream.addTrack(trackToSend) // trackToSend は originalMicTrack または silentAudioTrack
+        this.options?.onLocalStream(this.localStream) // UIに通知
+        // if (currentLocalAudioTrack !== this.originalMicTrack && currentLocalAudioTrack !== this.silentAudioTrack && currentLocalAudioTrack.readyState === 'live') {
         //   console.log(`[PeerManager sendMuteStatus] Stopping old localStream audio track ${currentLocalAudioTrack.id}`);
         //   currentLocalAudioTrack.stop();
         // }
