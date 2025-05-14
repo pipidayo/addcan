@@ -850,6 +850,10 @@ export class PeerManager {
                 console.log(
                   `[PeerManager replaceTrackForAllConnections] Successfully replaced ${kind} track for ${peerId}. New sender track ID: ${sender.track?.id ?? 'null'}`
                 )
+                // ★★★ replaceTrack 後の接続状態を確認 ★★★
+                console.log(
+                  `[PeerManager replaceTrackForAllConnections] PeerConnection state for ${peerId} after replaceTrack: signalingState=${peerConnection.signalingState}, connectionState=${peerConnection.connectionState}, iceConnectionState=${peerConnection.iceConnectionState}`
+                )
               } catch (replaceError) {
                 console.error(
                   `[PeerManager instance ${this.peer?.id}] Failed to replace ${kind} track for ${peerId}:`,
