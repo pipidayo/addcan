@@ -550,7 +550,11 @@ export class PeerManager {
           try {
             await sender.replaceTrack(newTrack)
             console.log(
-              `[PeerManager] Successfully replaced ${kind} track for ${conn.peer} with ${newTrack?.id ?? 'null'}. Sender track now: ${sender.track?.id ?? 'null'}`
+              `[PeerManager replaceTrackForAllConnections DEBUG] After replaceTrack for ${conn.peer}: sender.track ID: ${sender.track?.id ?? 'null'}, sender.track.enabled: ${sender.track?.enabled}, sender.transport.iceTransport.state: ${sender.transport?.iceTransport.state}`
+            )
+            // ★★★ ここまで ★★★
+            console.log(
+              `[PeerManager] Successfully replaced ${kind} track for ${conn.peer} with ${newTrack?.id ?? 'null'}. Sender track now: ${sender.track?.id ?? 'null'}, enabled: ${sender.track?.enabled}`
             )
             // If newTrack is not null (i.e., unmuting), ensure its enabled state is true.
             // If newTrack is null (i.e., muting), sender.track will be null, and enabled doesn't apply.
