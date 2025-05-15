@@ -282,14 +282,15 @@ export default function CallControlsFooter({
         >
           <FiMonitor />
         </button>
-        <button
+        {/* ★ デバイス設定ボタンを一時的にコメントアウト */}
+        {/* <button
           ref={settingsButtonRef}
           onClick={() => setShowDeviceSettings(!showDeviceSettings)}
           className={`${styles.controlButton} ${showDeviceSettings ? styles.activeStateButton : ''}`}
           title='デバイス設定'
         >
           <FiSettings />
-        </button>
+        </button> */}
         <button
           onClick={leaveRoom}
           className={`${styles.controlButton} ${styles.leaveButton}`}

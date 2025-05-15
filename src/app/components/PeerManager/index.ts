@@ -671,9 +671,12 @@ export class PeerManager {
     if (!screenVideoTrack) return
     streamToShare.addTrack(screenVideoTrack)
 
+    // 画面共有時にはマイクの音声を originalMicTrack から取得して含める
+    // getDisplayMedia から取得した音声トラックはここでは使用しない
     const audioTrackForScreen = this.isMuted ? null : this.originalMicTrack
     if (audioTrackForScreen) {
       // Ensure the track to be shared is enabled if not muted
+      // The enabled state of originalMicTrack is already managed.
       audioTrackForScreen.enabled = true
       streamToShare.addTrack(audioTrackForScreen)
     }
@@ -713,7 +716,8 @@ export class PeerManager {
     try {
       this.screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
-        audio: true, // Request audio from screen share as well, though we might not use it directly
+        //audio: true, // Request audio from screen share as well, though we might not use it directly
+        audio: false, // ★ 画面共有からは音声を取得しない (マイク音声を別途使うため)
       })
       const screenVideoTrack = this.screenStream.getVideoTracks()[0]
       if (!screenVideoTrack) throw new Error('No video track in screen stream.')
@@ -726,6 +730,8 @@ export class PeerManager {
         this.screenShareTrackEndedListener
       )
 
+      // 画面共有接続に含める音声トラックは、常に originalMicTrack (またはミュート時は null) とする
+      // getDisplayMedia からの音声は使用しない
       const audioTrackForScreenConnections = this.isMuted
         ? null
         : this.originalMicTrack

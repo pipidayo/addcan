@@ -46,7 +46,7 @@ export default function CallScreen() {
   const [participantVolumes, setParticipantVolumes] = useState<{
     [id: string]: number
   }>({})
-  const localSpeakingThreshold = 10
+  const localSpeakingThreshold = 7
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const [screenSharingPeerId, setScreenSharingPeerId] = useState<string | null>(
     null
@@ -451,9 +451,9 @@ export default function CallScreen() {
         // analyser はどこにも接続しない (音を聞く必要はないため)
 
         let consecutiveSilenceFrames = 0
-        const silenceThresholdFrames = 10 // 静音と判定するまでのフレーム数
+        const silenceThresholdFrames = 12 // 静音と判定するまでのフレーム数
         let consecutiveSpeakingFrames = 0
-        const speakingThresholdFrames = 3 // 発言と判定するまでのフレーム数
+        const speakingThresholdFrames = 2 // 発言と判定するまでのフレーム数
 
         const analyse = () => {
           if (
