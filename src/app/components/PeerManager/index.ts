@@ -496,13 +496,22 @@ export class PeerManager {
 
     if (this.localStream && trackForLocalDisplay) {
       const currentLocalAudioTrack = this.localStream.getAudioTracks()[0]
+      const currentVideoTracks = this.localStream.getVideoTracks() // Keep existing video tracks
+
+      const newLocalStreamTracks: MediaStreamTrack[] = [...currentVideoTracks]
       if (currentLocalAudioTrack?.id !== trackForLocalDisplay.id) {
-        if (currentLocalAudioTrack)
-          this.localStream.removeTrack(currentLocalAudioTrack)
-        this.localStream.addTrack(trackForLocalDisplay)
+        // The track instance for local display might be different (e.g., silent track)
       }
-      trackForLocalDisplay.enabled = !this.isMuted // Set enabled state for UI
-      this.options?.onLocalStream(this.localStream)
+      trackForLocalDisplay.enabled = !this.isMuted // Set enabled state for the track in the new stream
+      newLocalStreamTracks.push(trackForLocalDisplay)
+
+      // Create a new MediaStream instance to ensure React detects the change
+      const newLocalMediaStream = new MediaStream(newLocalStreamTracks)
+      this.localStream = newLocalMediaStream // Update internal reference
+      console.log(
+        `[PeerManager sendMuteStatus] Notifying UI with new localStream ${this.localStream.id} containing audio track ${trackForLocalDisplay.id} (enabled: ${trackForLocalDisplay.enabled})`
+      )
+      this.options?.onLocalStream(this.localStream) // Notify with the new stream instance
     }
 
     // Replace tracks for actual P2P connections
@@ -601,28 +610,31 @@ export class PeerManager {
       }
 
       // Update localStream for UI
-      const trackForLocalDisplay = this.isMuted
-        ? this.silentAudioTrack ||
-          (this.silentAudioTrack = this.createSilentAudioTrack())
-        : this.originalMicTrack
+      if (this.originalMicTrack) {
+        // originalMicTrack is the new one
+        this.originalMicTrack.enabled = !this.isMuted // Set its state according to current mute status
 
-      if (this.localStream && trackForLocalDisplay) {
-        const currentLocalUITrack = this.localStream.getAudioTracks()[0]
-        if (currentLocalUITrack?.id !== trackForLocalDisplay.id) {
-          if (currentLocalUITrack)
-            this.localStream.removeTrack(currentLocalUITrack)
-          this.localStream.addTrack(trackForLocalDisplay)
-        }
-        trackForLocalDisplay.enabled = !this.isMuted
+        const videoTracks = this.localStream?.getVideoTracks() || [] // Get existing video tracks or empty array
+        const newLocalStreamTracks: MediaStreamTrack[] = [...videoTracks]
+        newLocalStreamTracks.push(this.originalMicTrack) // Add the new, correctly enabled originalMicTrack
 
-        const dummyVideoTrack = this.localStream.getVideoTracks()[0]
+        // Ensure a dummy video track exists if no other video track is present
         if (
-          !dummyVideoTrack &&
-          this.localStream.getVideoTracks().length === 0
+          newLocalStreamTracks.filter((t) => t.kind === 'video').length === 0
         ) {
-          this.localStream.addTrack(this.createDummyVideoTrack())
+          newLocalStreamTracks.push(this.createDummyVideoTrack())
         }
-        this.options?.onLocalStream(this.localStream)
+
+        const newLocalMediaStream = new MediaStream(newLocalStreamTracks)
+        this.localStream = newLocalMediaStream // Update internal reference
+        console.log(
+          `[PeerManager switchMicrophone] Notifying UI with new localStream ${this.localStream.id} containing new audio track ${this.originalMicTrack.id} (enabled: ${this.originalMicTrack.enabled})`
+        )
+        this.options?.onLocalStream(this.localStream) // Notify with the new stream instance
+      } else {
+        console.warn(
+          '[PeerManager switchMicrophone] new originalMicTrack is null after getUserMedia, cannot update localStream for UI.'
+        )
       }
 
       console.log(
