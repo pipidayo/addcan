@@ -477,12 +477,10 @@ export class PeerManager {
     let trackToUseForSend: MediaStreamTrack | null = null
 
     if (this.isMuted) {
-      if (this.originalMicTrack) this.originalMicTrack.enabled = false // Disable original track
       trackToUseForSend = null // Mute by sending null track
       console.log(
         `[PeerManager sendMuteStatus] Muting: Replacing tracks with null.`
       )
-      if (this.silentAudioTrack) this.silentAudioTrack.enabled = false // Ensure silent track is disabled
     } else {
       trackToUseForSend = this.originalMicTrack
       if (trackToUseForSend) {
@@ -506,9 +504,6 @@ export class PeerManager {
       const newLocalStreamTracks: MediaStreamTrack[] = [...currentVideoTracks]
       if (currentLocalAudioTrack?.id !== trackForLocalDisplay.id) {
         // The track instance for local display might be different (e.g., silent track)
-      } else if (!currentLocalAudioTrack && trackForLocalDisplay) {
-        // If no audio track exists in localStream, add it
-        this.localStream.addTrack(trackForLocalDisplay)
       }
       trackForLocalDisplay.enabled = !this.isMuted // Set enabled state for the track in the new stream
       newLocalStreamTracks.push(trackForLocalDisplay)
@@ -554,7 +549,6 @@ export class PeerManager {
         if (sender) {
           try {
             await sender.replaceTrack(newTrack)
-            // ★★★ デバッグログ追加 ★★★
             console.log(
               `[PeerManager replaceTrackForAllConnections DEBUG] After replaceTrack for ${conn.peer}: sender.track ID: ${sender.track?.id ?? 'null'}, sender.track.enabled: ${sender.track?.enabled}, sender.transport.iceTransport.state: ${sender.transport?.iceTransport.state}`
             )
@@ -562,8 +556,15 @@ export class PeerManager {
             console.log(
               `[PeerManager] Successfully replaced ${kind} track for ${conn.peer} with ${newTrack?.id ?? 'null'}. Sender track now: ${sender.track?.id ?? 'null'}, enabled: ${sender.track?.enabled}`
             )
-            // The enabled state should be set on the track *before* replaceTrack.
-            // No need to set sender.track.enabled here.
+            // If newTrack is not null (i.e., unmuting), ensure its enabled state is true.
+            // If newTrack is null (i.e., muting), sender.track will be null, and enabled doesn't apply.
+            if (sender.track) {
+              // Check if sender.track exists (it won't if newTrack was null)
+              sender.track.enabled = !this.isMuted // This should align with the trackToUseForSend's intended state
+              console.log(
+                `[PeerManager] Set sender.track ${sender.track.id} for ${conn.peer} enabled to ${sender.track.enabled} (isMuted: ${this.isMuted})`
+              )
+            }
           } catch (error) {
             console.error(
               `[PeerManager] Failed to replace ${kind} track for ${conn.peer}:`,
@@ -589,24 +590,14 @@ export class PeerManager {
       const newAudioTrack = newMicStream.getAudioTracks()[0]
       if (!newAudioTrack) throw new Error('Failed to get new audio track.')
 
-      // Stop the old track before replacing it everywhere
-      if (oldLocalAudioTrack && oldLocalAudioTrack.readyState === 'live') {
-        console.log(
-          `[PeerManager switchMicrophone] Stopping old local audio track: ID=${oldLocalAudioTrack.id}`
-        )
-        oldLocalAudioTrack.stop()
-      }
-
       this.originalMicTrack = newAudioTrack // Update the main mic track reference
 
-      // Set the enabled state of the new originalMicTrack based on the current mute status
-      this.originalMicTrack.enabled = !this.isMuted // Set enabled state for the new track
       const trackToUseForConnections = this.isMuted
         ? null
-        : this.originalMicTrack // Determine track for sending based on mute status
-      // The enabled state is already set on originalMicTrack. No need to re-set here.
-      if (trackToUseForConnections) {
-        // Log the enabled state of the track being sent
+        : this.originalMicTrack
+      if (this.originalMicTrack && trackToUseForConnections) {
+        // Ensure trackToUseForConnections is not null before enabling
+
         this.originalMicTrack.enabled = true
       }
 
@@ -634,13 +625,12 @@ export class PeerManager {
 
       if (this.originalMicTrack) {
         // Add the new audio track
-        // The enabled state of originalMicTrack is already set above based on this.isMuted. Add it to the new local stream.
+        this.originalMicTrack.enabled = !this.isMuted // Set its state according to current mute status
         newLocalStreamTracks.push(this.originalMicTrack)
       } else {
         // If originalMicTrack is null (shouldn't happen after successful getUserMedia),
         // add the silent track for UI if muted, or just have video if unmuted.
-        if (this.isMuted && this.silentAudioTrack) {
-          // Ensure silentAudioTrack exists
+        if (this.isMuted) {
           const silent =
             this.silentAudioTrack ||
             (this.silentAudioTrack = this.createSilentAudioTrack())
@@ -659,6 +649,12 @@ export class PeerManager {
       console.log(
         `[PeerManager switchMicrophone] Switched to ${newDeviceId}. Old track: ${oldLocalAudioTrackId}`
       )
+      if (
+        oldLocalAudioTrackId &&
+        oldLocalAudioTrackId !== this.originalMicTrack?.id
+      ) {
+        // Consider stopping the very old track if it's still around and not this.originalMicTrack
+      }
     } catch (error) {
       console.error('[PeerManager switchMicrophone] Failed:', error)
       throw error
@@ -677,8 +673,8 @@ export class PeerManager {
 
     const audioTrackForScreen = this.isMuted ? null : this.originalMicTrack
     if (audioTrackForScreen) {
-      // The enabled state of originalMicTrack is already managed by sendMuteStatus and switchMicrophone.
-      // It should reflect the current mute state. Add it to the stream if not muted.
+      // Ensure the track to be shared is enabled if not muted
+      audioTrackForScreen.enabled = true
       streamToShare.addTrack(audioTrackForScreen)
     }
 
@@ -707,7 +703,7 @@ export class PeerManager {
       pc?.getSenders().forEach((sender) => {
         if (sender.track?.kind === 'audio' && sender.track) {
           console.log(
-            `[PeerManager startScreenShare] Disabling audio track ${sender.track.id} on mediaConnection for ${conn.peer} by setting enabled=false`
+            `[PeerManager startScreenShare] Disabling audio track ${sender.track.id} on mediaConnection for ${conn.peer}`
           )
           sender.track.enabled = false // Disable audio on normal call during screen share
         }
@@ -734,7 +730,6 @@ export class PeerManager {
         ? null
         : this.originalMicTrack
       if (audioTrackForScreenConnections) {
-        // The enabled state of originalMicTrack is already managed.
         audioTrackForScreenConnections.enabled = true // Ensure it's enabled if we are sending it
       }
 
@@ -753,7 +748,8 @@ export class PeerManager {
                 e
               )
             )
-          sender.track.enabled = true
+          if (sender.track && audioTrackForScreenConnections)
+            sender.track.enabled = true
         }
       })
 
@@ -787,7 +783,7 @@ export class PeerManager {
     // Re-enable audio on normal media connections based on current mute state
     // The originalMicTrack's enabled state should already reflect the mute status.
     if (this.originalMicTrack) {
-      this.originalMicTrack.enabled = !this.isMuted // Ensure it's correct based on the global mute state
+      this.originalMicTrack.enabled = !this.isMuted // Ensure it's correct
       console.log(
         `[PeerManager stopScreenShare] Re-enabling originalMicTrack ${this.originalMicTrack.id} for mediaConnections, enabled: ${this.originalMicTrack.enabled}`
       )
