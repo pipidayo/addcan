@@ -300,12 +300,15 @@ export default function CallScreen() {
     [myPeerIdFromHook, upsertParticipant, callPeerHookFromHook]
   )
 
-  const handleUserLeft = useCallback((peerId: string) => {
-    console.log(
-      `★★★ [CallScreen] Received user-left event via WebSocket: ${peerId}`
-    )
-    // removePeer(peerId); // PeerJS側で処理されるので不要
-  }, [])
+  const handleUserLeft = useCallback(
+    (peerId: string) => {
+      console.log(
+        `★★★ [CallScreen] Received user-left event via WebSocket: ${peerId}`
+      )
+      removePeer(peerId) // ★ サーバーからの退出通知で参加者を削除
+    },
+    [removePeer]
+  ) // ★ removePeer を依存配列に追加
 
   const handleScreenShareStatus = useCallback(
     (payload: ScreenShareStatusPayload) => {
