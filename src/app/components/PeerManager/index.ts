@@ -843,14 +843,14 @@ export class PeerManager {
                   )
                 }
                 await sender.replaceTrack(newTrack)
-                // // ★ replaceTrack後、新しいトラックのenabled状態を現在のミュート状態に合わせる
-                // //    トラックの enabled は replaceTrack 前に設定済みに変更
-                // if (newTrack) {
-                //   // newTrack.enabled = !this.isMuted; // 呼び出し元で設定する方針に変更
-                //   console.log(
-                //     `[PeerManager replaceTrackForAllConnections] Track ${newTrack.id} for ${peerId} should have enabled: ${newTrack.enabled} (isMuted: ${this.isMuted})`
-                //   );
-                // }
+                // ★ replaceTrack後、sender が実際に保持しているトラックの enabled 状態を現在のミュート状態に合わせる
+                if (sender.track) {
+                  // sender.track が null でないことを確認
+                  sender.track.enabled = !this.isMuted
+                  console.log(
+                    `[PeerManager replaceTrackForAllConnections] Set sender.track ${sender.track.id} for ${peerId} enabled to ${sender.track.enabled} (isMuted: ${this.isMuted})`
+                  )
+                }
                 console.log(
                   `[PeerManager replaceTrackForAllConnections] Successfully replaced ${kind} track for ${peerId}. New sender track ID: ${sender.track?.id ?? 'null'}`
                 )
