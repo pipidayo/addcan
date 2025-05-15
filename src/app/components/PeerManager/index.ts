@@ -99,12 +99,15 @@ export class PeerManager {
     const audioContext = new AudioContext()
     const oscillator = audioContext.createOscillator()
     const gainNode = audioContext.createGain()
-    oscillator.connect(gainNode)
-    gainNode.connect(audioContext.destination)
+
+    oscillator.connect(gainNode) // Connect oscillator to gain node
     gainNode.gain.value = 0 // Ensure it's silent
+
     const destination = audioContext.createMediaStreamDestination()
-    oscillator.start() // Start the oscillator to generate a silent signal
-    gainNode.connect(destination) // Connect gain to destination
+    gainNode.connect(destination) // Connect gainNode output to the stream destination
+
+    oscillator.start() // Start the oscillator to generate a signal (even if silent)
+
     const track = destination.stream.getAudioTracks()[0]
     track.enabled = false // Start disabled, will be enabled by sendMuteStatus if needed for localStream
     console.log(
@@ -571,10 +574,10 @@ export class PeerManager {
   }
 
   public async switchMicrophone(newDeviceId: string) {
-    const currentAudioTrack = this.localStream?.getAudioTracks()[0]
-    if (currentAudioTrack?.getSettings().deviceId === newDeviceId) return
+    const oldLocalAudioTrack = this.localStream?.getAudioTracks()[0]
+    if (oldLocalAudioTrack?.getSettings().deviceId === newDeviceId) return
 
-    const oldLocalAudioTrackId = currentAudioTrack?.id
+    const oldLocalAudioTrackId = oldLocalAudioTrack?.id
 
     try {
       const newMicStream = await navigator.mediaDevices.getUserMedia({
@@ -588,7 +591,9 @@ export class PeerManager {
       const trackToUseForConnections = this.isMuted
         ? null
         : this.originalMicTrack
-      if (this.originalMicTrack && !this.isMuted) {
+      if (this.originalMicTrack && trackToUseForConnections) {
+        // Ensure trackToUseForConnections is not null before enabling
+
         this.originalMicTrack.enabled = true
       }
 
@@ -610,32 +615,32 @@ export class PeerManager {
       }
 
       // Update localStream for UI
+      // Create a new localStream instance with the new audio track and existing video tracks
+      const videoTracks = this.localStream?.getVideoTracks() || []
+      const newLocalStreamTracks: MediaStreamTrack[] = [...videoTracks]
+
       if (this.originalMicTrack) {
-        // originalMicTrack is the new one
+        // Add the new audio track
         this.originalMicTrack.enabled = !this.isMuted // Set its state according to current mute status
-
-        const videoTracks = this.localStream?.getVideoTracks() || [] // Get existing video tracks or empty array
-        const newLocalStreamTracks: MediaStreamTrack[] = [...videoTracks]
-        newLocalStreamTracks.push(this.originalMicTrack) // Add the new, correctly enabled originalMicTrack
-
-        // Ensure a dummy video track exists if no other video track is present
-        if (
-          newLocalStreamTracks.filter((t) => t.kind === 'video').length === 0
-        ) {
-          newLocalStreamTracks.push(this.createDummyVideoTrack())
-        }
-
-        const newLocalMediaStream = new MediaStream(newLocalStreamTracks)
-        this.localStream = newLocalMediaStream // Update internal reference
-        console.log(
-          `[PeerManager switchMicrophone] Notifying UI with new localStream ${this.localStream.id} containing new audio track ${this.originalMicTrack.id} (enabled: ${this.originalMicTrack.enabled})`
-        )
-        this.options?.onLocalStream(this.localStream) // Notify with the new stream instance
+        newLocalStreamTracks.push(this.originalMicTrack)
       } else {
-        console.warn(
-          '[PeerManager switchMicrophone] new originalMicTrack is null after getUserMedia, cannot update localStream for UI.'
-        )
+        // If originalMicTrack is null (shouldn't happen after successful getUserMedia),
+        // add the silent track for UI if muted, or just have video if unmuted.
+        if (this.isMuted) {
+          const silent =
+            this.silentAudioTrack ||
+            (this.silentAudioTrack = this.createSilentAudioTrack())
+          silent.enabled = false
+          newLocalStreamTracks.push(silent)
+        }
       }
+
+      const newLocalMediaStream = new MediaStream(newLocalStreamTracks)
+      this.localStream = newLocalMediaStream // Update internal reference
+      console.log(
+        `[PeerManager switchMicrophone] Notifying UI with new localStream ${this.localStream.id} containing new audio track ${this.originalMicTrack?.id} (enabled: ${this.originalMicTrack?.enabled})`
+      )
+      this.options?.onLocalStream(this.localStream) // Notify with the new stream instance
 
       console.log(
         `[PeerManager switchMicrophone] Switched to ${newDeviceId}. Old track: ${oldLocalAudioTrackId}`
@@ -692,7 +697,12 @@ export class PeerManager {
     Object.values(this.mediaConnections).forEach((conn) => {
       const pc = conn.peerConnection as RTCPeerConnection | undefined
       pc?.getSenders().forEach((sender) => {
-        if (sender.track?.kind === 'audio') sender.track.enabled = false
+        if (sender.track?.kind === 'audio' && sender.track) {
+          console.log(
+            `[PeerManager startScreenShare] Disabling audio track ${sender.track.id} on mediaConnection for ${conn.peer}`
+          )
+          sender.track.enabled = false // Disable audio on normal call during screen share
+        }
       })
     })
 
@@ -767,15 +777,20 @@ export class PeerManager {
     if (this.socket?.connected) this.socket.emit('notify-stop-share')
 
     // Re-enable audio on normal media connections based on current mute state
-    const audioTrackForMediaConnections = this.isMuted
-      ? null
-      : this.originalMicTrack
-    if (this.originalMicTrack && !this.isMuted) {
-      this.originalMicTrack.enabled = true
+    // The originalMicTrack's enabled state should already reflect the mute status.
+    if (this.originalMicTrack) {
+      this.originalMicTrack.enabled = !this.isMuted // Ensure it's correct
+      console.log(
+        `[PeerManager stopScreenShare] Re-enabling originalMicTrack ${this.originalMicTrack.id} for mediaConnections, enabled: ${this.originalMicTrack.enabled}`
+      )
+    } else {
+      console.warn(
+        `[PeerManager stopScreenShare] originalMicTrack is null, cannot re-enable audio for mediaConnections.`
+      )
     }
-
+    // Replace track on mediaConnections to ensure they use the (potentially re-enabled) originalMicTrack
     await this.replaceTrackForAllConnections(
-      audioTrackForMediaConnections,
+      this.originalMicTrack, // Send the originalMicTrack, its 'enabled' property dictates mute
       'audio',
       this.mediaConnections
     )
