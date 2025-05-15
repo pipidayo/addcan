@@ -291,6 +291,14 @@ io.on('connection', (socket) => {
     const peerId = socket.currentPeerId
     const roomCode = socket.currentRoomCode
 
+    // ユーザーが部屋に参加していたか、情報が正しく設定されていたか確認
+    if (!roomCode || !peerId || !rooms[roomCode]) {
+      debugLog(
+        `[Server disconnect] User ${socket.id} (Peer ID: ${peerId}) was not in a room or room data inconsistent. No room cleanup needed.`
+      )
+      return // 部屋に参加していなかった場合はここで終了
+    }
+
     // Peer ID と Socket ID の紐付けを解除
     if (peerId) {
       peerIdToSocketId.delete(peerId)
@@ -305,55 +313,48 @@ io.on('connection', (socket) => {
       JSON.stringify(rooms)
     )
 
-    // ユーザーが部屋に参加していた場合のみ処理
-    if (roomCode && peerId && rooms[roomCode]) {
-      const room = rooms[roomCode] // room 変数を使用
+    const room = rooms[roomCode] // room 変数を使用
 
-      if (room.participants[peerId]) {
+    if (room.participants[peerId]) {
+      // ★ participants を確認
+      debugLog(
+        `[Server disconnect] Removing ${peerId} (${room.participants[peerId]}) from room ${roomCode}`
+      )
+
+      // ★ 共有者だったかどうかをチェック ★
+      const wasSharing = room.sharerPeerId === peerId
+
+      delete room.participants[peerId] // ★ participants から削除
+
+      // 他の参加者に退出を通知
+      debugLog(
+        `[Server disconnect] Broadcasting 'user-left' to room ${roomCode}. Payload:`,
+        { peerId }
+      )
+      // io.to(roomCode).emit('user-left', { peerId }) // { peerId } オブジェクトではなく peerId 文字列を送る方が一般的かも？クライアントの実装に合わせる
+      io.to(roomCode).emit('user-left', peerId) // Peer ID 文字列を送信
+
+      // ★ もし退出した人が画面共有中だったら、それも通知 ★
+      if (wasSharing) {
+        debugLog(
+          `[Server disconnect] Broadcasting screen share stop because sharer ${peerId} left room ${roomCode}.`
+        )
+        room.sharerPeerId = null // 共有者IDをリセット
+        // 部屋の全員に通知
+        io.to(roomCode).emit('screen-share-status', {
+          peerId: peerId, // 誰の共有が停止したか
+          isSharing: false, // 停止したこと
+          sharerPeerId: null, // 現在の共有者ID
+        })
+      }
+
+      // 部屋に誰もいなくなったら部屋を削除
+      if (Object.keys(room.participants).length === 0) {
         // ★ participants を確認
         debugLog(
-          `[Server disconnect] Removing ${peerId} (${room.participants[peerId]}) from room ${roomCode}`
+          `[Server disconnect] Room ${roomCode} is empty, deleting room.`
         )
-
-        // ★ 共有者だったかどうかをチェック ★
-        const wasSharing = room.sharerPeerId === peerId
-
-        delete room.participants[peerId] // ★ participants から削除
-
-        // 他の参加者に退出を通知
-        debugLog(
-          `[Server disconnect] Broadcasting 'user-left' to room ${roomCode}. Payload:`,
-          { peerId }
-        )
-        // io.to(roomCode).emit('user-left', { peerId }) // { peerId } オブジェクトではなく peerId 文字列を送る方が一般的かも？クライアントの実装に合わせる
-        io.to(roomCode).emit('user-left', peerId) // Peer ID 文字列を送信
-
-        // ★ もし退出した人が画面共有中だったら、それも通知 ★
-        if (wasSharing) {
-          debugLog(
-            `[Server disconnect] Broadcasting screen share stop because sharer ${peerId} left room ${roomCode}.`
-          )
-          room.sharerPeerId = null // 共有者IDをリセット
-          // 部屋の全員に通知
-          io.to(roomCode).emit('screen-share-status', {
-            peerId: peerId, // 誰の共有が停止したか
-            isSharing: false, // 停止したこと
-            sharerPeerId: null, // 現在の共有者ID
-          })
-        }
-
-        // 部屋に誰もいなくなったら部屋を削除
-        if (Object.keys(room.participants).length === 0) {
-          // ★ participants を確認
-          debugLog(
-            `[Server disconnect] Room ${roomCode} is empty, deleting room.`
-          )
-          delete rooms[roomCode]
-        }
-      } else {
-        console.warn(
-          `[Server disconnect] Peer ID ${peerId} not found in room ${roomCode} participants upon disconnect.`
-        )
+        delete rooms[roomCode]
       }
     } else {
       debugLog(
