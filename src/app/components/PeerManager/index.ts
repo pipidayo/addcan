@@ -590,14 +590,24 @@ export class PeerManager {
       const newAudioTrack = newMicStream.getAudioTracks()[0]
       if (!newAudioTrack) throw new Error('Failed to get new audio track.')
 
+      // Stop the old track before replacing it everywhere
+      if (oldLocalAudioTrack && oldLocalAudioTrack.readyState === 'live') {
+        console.log(
+          `[PeerManager switchMicrophone] Stopping old local audio track: ID=${oldLocalAudioTrack.id}`
+        )
+        oldLocalAudioTrack.stop()
+      }
+
       this.originalMicTrack = newAudioTrack // Update the main mic track reference
+
+      // Set the enabled state of the new originalMicTrack based on the current mute status
+      this.originalMicTrack.enabled = !this.isMuted
 
       const trackToUseForConnections = this.isMuted
         ? null
         : this.originalMicTrack
-      if (this.originalMicTrack && trackToUseForConnections) {
-        // Ensure trackToUseForConnections is not null before enabling
-
+      // Ensure the track to be sent is correctly enabled if it's not null
+      if (trackToUseForConnections) {
         this.originalMicTrack.enabled = true
       }
 
@@ -625,12 +635,13 @@ export class PeerManager {
 
       if (this.originalMicTrack) {
         // Add the new audio track
-        this.originalMicTrack.enabled = !this.isMuted // Set its state according to current mute status
+        // The enabled state of originalMicTrack is already set above based on this.isMuted
         newLocalStreamTracks.push(this.originalMicTrack)
       } else {
         // If originalMicTrack is null (shouldn't happen after successful getUserMedia),
         // add the silent track for UI if muted, or just have video if unmuted.
-        if (this.isMuted) {
+        if (this.isMuted && this.silentAudioTrack) {
+          // Ensure silentAudioTrack exists
           const silent =
             this.silentAudioTrack ||
             (this.silentAudioTrack = this.createSilentAudioTrack())
@@ -649,12 +660,6 @@ export class PeerManager {
       console.log(
         `[PeerManager switchMicrophone] Switched to ${newDeviceId}. Old track: ${oldLocalAudioTrackId}`
       )
-      if (
-        oldLocalAudioTrackId &&
-        oldLocalAudioTrackId !== this.originalMicTrack?.id
-      ) {
-        // Consider stopping the very old track if it's still around and not this.originalMicTrack
-      }
     } catch (error) {
       console.error('[PeerManager switchMicrophone] Failed:', error)
       throw error
