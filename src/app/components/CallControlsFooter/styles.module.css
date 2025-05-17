@@ -51,9 +51,11 @@
   background-color: #4a4e5a;
   color: white;
   border: none;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
+  border-radius: 8px;
+  width: auto; /* 幅を自動調整に変更 */
+  min-width: 50px; /* 最小幅を設定 */
+  height: 44px; /* 高さを少し調整 */
+  padding: 0 16px; /* 左右のパディングを追加 */
   display: flex;
   justify-content: center;
   align-items: center;
