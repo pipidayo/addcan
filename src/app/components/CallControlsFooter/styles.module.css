@@ -49,7 +49,7 @@
 /* ★ コントロールボタン共通スタイル (元のスタイルに戻す) */
 .controlButton {
   background-color: #4a4e5a;
-  color: white;
+  color: #2c3e50;
   border: none;
   border-radius: 8px;
   width: auto; /* 幅を自動調整に変更 */
