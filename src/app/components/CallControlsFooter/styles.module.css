@@ -48,7 +48,7 @@
 
 /* ★ コントロールボタン共通スタイル (元のスタイルに戻す) */
 .controlButton {
-  background-color: #4a4e5a;
+  background-color: #2c3e50;
   color: white;
   border: none;
   border-radius: 8px;
@@ -68,7 +68,7 @@
 }
 
 .controlButton:hover {
-  background-color: #616570;
+  background-color: #34495e;
 }
 
 .controlButton:disabled {
