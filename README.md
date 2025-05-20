@@ -14,13 +14,11 @@ Addcan（アドキャン）は追加を意味する「Add」、連絡先を意�
 連絡先交換をキャンセルしたい人に向けたサービスです。
 
 ## メイン機能
-・通話
-・画面共有
+*   通話
+*   画面共有
 
-デモ動画
-<a href="https://youtu.be/0n1i8-7VPhc" target="_blank" rel="noopener noreferrer">
-  <img src="https://img.youtube.com/vi/0n1i8-7VPhc/0.jpg" alt="デモ動画">
-</a>
+### デモ動画
+[![デモ動画](https://img.youtube.com/vi/0n1i8-7VPhc/0.jpg)](https://youtu.be/0n1i8-7VPhc)
 
 
 ## 技術スタック
