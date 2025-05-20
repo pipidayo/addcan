@@ -15,6 +15,9 @@ Addcan（アドキャン）は追加を意味する「Add」、連絡先を意�
 
 ## メイン機能
 
+[![デモ動画](https://img.youtube.com/vi/0n1i8-7VPhc/0.jpg)](https://youtu.be/0n1i8-7VPhc)
+
+
 ## 技術スタック
 
 ### フロントエンド
