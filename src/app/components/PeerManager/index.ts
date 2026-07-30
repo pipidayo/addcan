@@ -152,7 +152,7 @@ export class PeerManager {
         }
         currentAnalysisData.animationFrameId = requestAnimationFrame(analyse)
         currentAnalysisData.analyser.getByteFrequencyData(
-          currentAnalysisData.dataArray
+          currentAnalysisData.dataArray as any
         )
         let sum = 0
         for (let i = 0; i < currentAnalysisData.dataArray.length; i++)
@@ -494,7 +494,7 @@ export class PeerManager {
     // Update localStream for UI feedback (independent of sending)
     const trackForLocalDisplay = this.isMuted
       ? this.silentAudioTrack ||
-        (this.silentAudioTrack = this.createSilentAudioTrack())
+      (this.silentAudioTrack = this.createSilentAudioTrack())
       : this.originalMicTrack
 
     if (this.localStream && trackForLocalDisplay) {

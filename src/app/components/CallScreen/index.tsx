@@ -468,9 +468,8 @@ export default function CallScreen() {
           }
 
           localAudioAnalysis.current.analyser.getByteFrequencyData(
-            localAudioAnalysis.current.dataArray
+            localAudioAnalysis.current.dataArray as any
           )
-
           // 簡単な音量計算 (周波数データの平均値)
           let sum = 0
           for (let i = 0; i < bufferLength; i++) {
